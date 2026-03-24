@@ -1,0 +1,1337 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vinyl Shelf Organizer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #090909;
+      --bg-2: #141414;
+      --panel: rgba(18, 18, 18, 0.96);
+      --line: #7a5b00;
+      --line-soft: rgba(218, 165, 32, 0.28);
+      --text: #f5d77a;
+      --muted: #c8a94b;
+      --accent: #daa520;
+      --accent-strong: #f2c94c;
+      --warn: #ffcc66;
+      --error: #ff7a7a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Courier New", Courier, monospace;
+      background:
+        radial-gradient(circle at top left, rgba(218, 165, 32, 0.18) 0, transparent 26%),
+        linear-gradient(135deg, #000 0%, var(--bg) 45%, var(--bg-2) 100%);
+      color: var(--text);
+    }
+
+    .shell {
+      max-width: 1880px;
+      margin: 0;
+      padding: 24px 24px 24px 18px;
+    }
+
+    .app-layout {
+      display: grid;
+      grid-template-columns: minmax(760px, 1.2fr) minmax(420px, 0.8fr) minmax(300px, 0.7fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .main-column {
+      min-width: 0;
+    }
+
+    .side-column {
+      min-width: 0;
+    }
+
+    .dashboard-column {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(218, 165, 32, 0.18);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tab {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(218, 165, 32, 0.08), rgba(218, 165, 32, 0.02));
+      color: var(--text);
+      padding: 10px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: #111;
+      border-color: var(--accent);
+      box-shadow: 0 0 22px rgba(218, 165, 32, 0.28);
+    }
+
+    .panel {
+      display: none;
+      background:
+        linear-gradient(180deg, rgba(218, 165, 32, 0.04), transparent 18%),
+        var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow:
+        0 18px 50px rgba(0, 0, 0, 0.45),
+        inset 0 0 0 1px rgba(218, 165, 32, 0.06);
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .inline-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .inline-toggle input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      padding: 0;
+    }
+
+    input, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 12px;
+    }
+
+    input {
+      border: 1px solid var(--line);
+      padding: 14px 16px;
+      background: #050505;
+      font-size: 20px;
+      color: var(--accent-strong);
+      box-shadow: inset 0 0 0 1px rgba(218, 165, 32, 0.04);
+    }
+
+    input:focus, button:focus, .result-item:focus {
+      outline: 3px solid rgba(218, 165, 32, 0.2);
+      outline-offset: 1px;
+    }
+
+    button {
+      border: 1px solid var(--accent);
+      background: linear-gradient(180deg, #f0bf42, var(--accent));
+      color: #121212;
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    button.secondary {
+      background: #111;
+      color: var(--text);
+      border-color: var(--line);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .status {
+      min-height: 28px;
+      margin: 10px 0 16px;
+      font-size: 15px;
+      color: var(--muted);
+    }
+
+    .status.success {
+      color: var(--accent-strong);
+    }
+
+    .status.warning {
+      color: var(--warn);
+    }
+
+    .status.error {
+      color: var(--error);
+    }
+
+    .results {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #080808;
+      overflow: hidden;
+      min-height: 360px;
+    }
+
+    .results-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      color: var(--muted);
+      background: rgba(218, 165, 32, 0.08);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .result-item {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid var(--line-soft);
+      border-radius: 0;
+      background: #0d0d0d;
+      color: var(--text);
+      padding: 14px;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: none;
+    }
+
+    .result-item:last-child {
+      border-bottom: 0;
+    }
+
+    .result-item.active {
+      background:
+        linear-gradient(90deg, rgba(218, 165, 32, 0.2), rgba(218, 165, 32, 0.04));
+    }
+
+    .meta {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .assign-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .assign-actions button {
+      width: auto;
+      min-width: 144px;
+      flex: 0 0 auto;
+    }
+
+    .sort-output {
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px;
+      background:
+        radial-gradient(circle at center, rgba(218, 165, 32, 0.08), transparent 55%),
+        #070707;
+    }
+
+    .sort-label {
+      font-size: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .sort-artist {
+      font-size: 30px;
+      font-weight: 700;
+    }
+
+    .sort-title {
+      font-size: 22px;
+      color: var(--muted);
+    }
+
+    .sort-shelf {
+      font-size: clamp(46px, 10vw, 88px);
+      line-height: 1;
+      font-weight: 700;
+      color: var(--accent-strong);
+      text-shadow: 0 0 18px rgba(218, 165, 32, 0.22);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .progress-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 100%;
+    }
+
+    .progress-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .progress-title {
+      margin: 0;
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .progress-subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .progress-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .progress-highlights {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(218, 165, 32, 0.04);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .stat-value {
+      margin-top: 6px;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent-strong);
+    }
+
+    .stat-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .progress-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
+
+    .progress-item {
+      border: 1px solid var(--line-soft);
+      border-radius: 14px;
+      padding: 10px 11px;
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    .progress-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .progress-shelf {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-strong);
+    }
+
+    .progress-percent {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .progress-meta {
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 7px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(218, 165, 32, 0.12);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #9b740c, var(--accent-strong));
+      box-shadow: 0 0 16px rgba(218, 165, 32, 0.22);
+    }
+
+    .dashboard-section {
+      border-top: 1px solid var(--line-soft);
+      padding-top: 12px;
+    }
+
+    .dashboard-title {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .mini-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mini-item {
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    .mini-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .mini-main {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-strong);
+    }
+
+    .mini-sub {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .mini-value {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .range-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .dashboard-card {
+      display: block;
+      min-height: 100%;
+    }
+
+    @media (max-width: 1180px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .progress-summary {
+        grid-template-columns: 1fr;
+      }
+
+      .progress-highlights {
+        grid-template-columns: 1fr;
+      }
+
+      .progress-list {
+        grid-template-columns: 1fr;
+      }
+
+      .range-grid {
+        grid-template-columns: 1fr;
+      }
+
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="app-layout">
+      <div class="main-column">
+        <div class="topbar">
+          <h1>Vinyl Shelf Organizer</h1>
+          <div class="tabs" role="tablist" aria-label="Modes">
+            <button class="tab active" id="assignTab" type="button" data-mode="assign">Assign</button>
+            <button class="tab" id="sortTab" type="button" data-mode="sort">Sort</button>
+          </div>
+        </div>
+
+        <section class="panel active" id="assignPanel">
+          <div class="grid">
+            <div>
+              <div class="field">
+                <label for="barcodeInput">Scanned barcode</label>
+                <input id="barcodeInput" autocomplete="off" inputmode="numeric" placeholder="Scan barcode and press Enter" />
+              </div>
+
+              <div class="field">
+                <label for="searchInput">Search artist or title</label>
+                <input id="searchInput" autocomplete="off" placeholder="Type search, then arrow keys + Enter" />
+              </div>
+
+              <label class="inline-toggle" for="unassignedOnlyToggle">
+                <input id="unassignedOnlyToggle" type="checkbox" checked />
+                <span>Unassigned Only</span>
+              </label>
+
+              <div class="assign-actions">
+                <button id="assignButton" type="button" disabled>Assign Album</button>
+                <button id="clearButton" class="secondary" type="button">Clear</button>
+                <button id="undoButton" class="secondary" type="button">Undo Last</button>
+              </div>
+
+              <div id="assignStatus" class="status"></div>
+              <div class="hint">Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.</div>
+            </div>
+
+            <div class="results" id="resultsBox">
+              <div class="results-header">Search results</div>
+              <div id="results"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="sortPanel">
+          <div class="field">
+            <label for="sortBarcodeInput">Scan barcode</label>
+            <input id="sortBarcodeInput" autocomplete="off" inputmode="numeric" placeholder="Scan barcode and press Enter" />
+          </div>
+
+          <div id="sortStatus" class="status"></div>
+
+          <div class="sort-output" id="sortOutput">
+            <div class="sort-label">Ready</div>
+            <div class="sort-artist">Scan a barcode</div>
+            <div class="sort-title">The matching album and shelf location will appear here.</div>
+            <div class="sort-shelf">--</div>
+          </div>
+        </section>
+
+      </div>
+
+      <aside class="side-column">
+        <section class="panel progress-panel">
+          <div class="progress-head">
+            <div>
+              <h2 class="progress-title">Shelf Progress</h2>
+              <div class="progress-subtitle">Scanned and assigned by current shelf group</div>
+            </div>
+          </div>
+
+          <div class="progress-summary">
+            <div class="stat-card">
+              <div class="stat-label">Assigned</div>
+              <div class="stat-value" id="progressAssigned">--</div>
+              <div class="stat-note" id="progressAssignedNote">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Overall Assigned</div>
+              <div class="stat-value" id="progressOverall">--</div>
+              <div class="stat-note" id="progressOverallNote">--</div>
+            </div>
+          </div>
+
+          <div class="progress-highlights">
+            <div class="stat-card">
+              <div class="stat-label">Shelves Started</div>
+              <div class="stat-value" id="progressStarted">--</div>
+              <div class="stat-note" id="progressStartedNote">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Shelves Complete</div>
+              <div class="stat-value" id="progressComplete">--</div>
+              <div class="stat-note" id="progressCompleteNote">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Most Advanced</div>
+              <div class="stat-value" id="progressLeader">--</div>
+              <div class="stat-note" id="progressLeaderNote">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Largest Remaining</div>
+              <div class="stat-value" id="progressBacklog">--</div>
+              <div class="stat-note" id="progressBacklogNote">--</div>
+            </div>
+          </div>
+
+          <div class="status" id="progressStatus"></div>
+          <div class="progress-list" id="progressList"></div>
+        </section>
+      </aside>
+
+      <aside class="dashboard-column">
+        <section class="panel active dashboard-card">
+          <h3 class="dashboard-title">Session Activity</h3>
+          <div class="progress-summary">
+            <div class="stat-card">
+              <div class="stat-label">This Session</div>
+              <div class="stat-value" id="sessionAssigned">0</div>
+              <div class="stat-note" id="sessionAssignedNote">Assignments since page load</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Current Barcode</div>
+              <div class="stat-value" id="sessionBarcode">--</div>
+              <div class="stat-note" id="sessionBarcodeNote">Waiting for next scan</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel active dashboard-card">
+          <h3 class="dashboard-title">Top Incomplete Shelves</h3>
+          <div class="mini-list" id="backlogList"></div>
+        </section>
+
+        <section class="panel active dashboard-card">
+          <h3 class="dashboard-title">Coverage By Range</h3>
+          <div class="range-grid" id="rangeGrid"></div>
+        </section>
+
+        <section class="panel active dashboard-card">
+          <h3 class="dashboard-title">Recent Assignments</h3>
+          <div class="mini-list" id="recentAssignments"></div>
+        </section>
+      </aside>
+    </div>
+
+  <script>
+    const state = {
+      mode: "assign",
+      assignBarcode: "",
+      results: [],
+      selectedIndex: -1,
+      searchTimer: null,
+      progress: [],
+      recentAssignments: [],
+      sessionAssigned: 0,
+      unassignedOnly: true
+    };
+
+    const assignTab = document.getElementById("assignTab");
+    const sortTab = document.getElementById("sortTab");
+    const assignPanel = document.getElementById("assignPanel");
+    const sortPanel = document.getElementById("sortPanel");
+
+    const barcodeInput = document.getElementById("barcodeInput");
+    const searchInput = document.getElementById("searchInput");
+    const unassignedOnlyToggle = document.getElementById("unassignedOnlyToggle");
+    const assignButton = document.getElementById("assignButton");
+    const clearButton = document.getElementById("clearButton");
+    const undoButton = document.getElementById("undoButton");
+    const assignStatus = document.getElementById("assignStatus");
+    const resultsEl = document.getElementById("results");
+    const progressAssignedEl = document.getElementById("progressAssigned");
+    const progressAssignedNoteEl = document.getElementById("progressAssignedNote");
+    const progressOverallEl = document.getElementById("progressOverall");
+    const progressOverallNoteEl = document.getElementById("progressOverallNote");
+    const progressStartedEl = document.getElementById("progressStarted");
+    const progressStartedNoteEl = document.getElementById("progressStartedNote");
+    const progressCompleteEl = document.getElementById("progressComplete");
+    const progressCompleteNoteEl = document.getElementById("progressCompleteNote");
+    const progressLeaderEl = document.getElementById("progressLeader");
+    const progressLeaderNoteEl = document.getElementById("progressLeaderNote");
+    const progressBacklogEl = document.getElementById("progressBacklog");
+    const progressBacklogNoteEl = document.getElementById("progressBacklogNote");
+    const progressStatusEl = document.getElementById("progressStatus");
+    const progressListEl = document.getElementById("progressList");
+    const backlogListEl = document.getElementById("backlogList");
+    const rangeGridEl = document.getElementById("rangeGrid");
+    const recentAssignmentsEl = document.getElementById("recentAssignments");
+    const sessionAssignedEl = document.getElementById("sessionAssigned");
+    const sessionAssignedNoteEl = document.getElementById("sessionAssignedNote");
+    const sessionBarcodeEl = document.getElementById("sessionBarcode");
+    const sessionBarcodeNoteEl = document.getElementById("sessionBarcodeNote");
+
+    const sortBarcodeInput = document.getElementById("sortBarcodeInput");
+    const sortStatus = document.getElementById("sortStatus");
+    const sortOutput = document.getElementById("sortOutput");
+
+    function setMode(mode) {
+      state.mode = mode;
+      assignTab.classList.toggle("active", mode === "assign");
+      sortTab.classList.toggle("active", mode === "sort");
+      assignPanel.classList.toggle("active", mode === "assign");
+      sortPanel.classList.toggle("active", mode === "sort");
+
+      window.location.hash = mode;
+
+      if (mode === "assign") {
+        barcodeInput.focus();
+      } else {
+        sortBarcodeInput.focus();
+      }
+    }
+
+    function setAssignStatus(message, type = "") {
+      assignStatus.textContent = message;
+      assignStatus.className = `status ${type}`.trim();
+    }
+
+    function setSortStatus(message, type = "") {
+      sortStatus.textContent = message;
+      sortStatus.className = `status ${type}`.trim();
+    }
+
+    function setProgressStatus(message, type = "") {
+      progressStatusEl.textContent = message;
+      progressStatusEl.className = `status ${type}`.trim();
+    }
+
+    function updateSessionWidgets() {
+      sessionAssignedEl.textContent = String(state.sessionAssigned);
+      sessionAssignedNoteEl.textContent = state.sessionAssigned === 1
+        ? "1 assignment since page load"
+        : `${state.sessionAssigned} assignments since page load`;
+      sessionBarcodeEl.textContent = state.assignBarcode || "--";
+      sessionBarcodeNoteEl.textContent = state.assignBarcode
+        ? "Buffered and ready to attach"
+        : "Waiting for next scan";
+    }
+
+    function renderRecentAssignments() {
+      recentAssignmentsEl.innerHTML = "";
+
+      if (state.recentAssignments.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "mini-item";
+        empty.innerHTML = `
+          <div class="mini-main">No assignments yet</div>
+          <div class="mini-sub">Successful barcode assignments in this browser session will appear here.</div>
+        `;
+        recentAssignmentsEl.appendChild(empty);
+        return;
+      }
+
+      state.recentAssignments.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "mini-item";
+        row.innerHTML = `
+          <div class="mini-row">
+            <div class="mini-main">${escapeHtml(item.barcode)}</div>
+            <div class="mini-value">#${escapeHtml(String(item.id))}</div>
+          </div>
+          <div class="mini-sub">${escapeHtml(item.artist)} - ${escapeHtml(item.title)}${item.assigned_at ? ` | ${escapeHtml(formatDateTime(item.assigned_at))}` : ""}</div>
+        `;
+        recentAssignmentsEl.appendChild(row);
+      });
+    }
+
+    async function loadHistory() {
+      try {
+        const data = await fetchJson("/history");
+        state.recentAssignments = Array.isArray(data)
+          ? data.map((item) => ({
+              ...item,
+              id: item.albumId ?? item.id
+            }))
+          : [];
+        renderRecentAssignments();
+      } catch (error) {
+        recentAssignmentsEl.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "mini-item";
+        empty.innerHTML = `
+          <div class="mini-main">History unavailable</div>
+          <div class="mini-sub">Recent assignment history could not be loaded.</div>
+        `;
+        recentAssignmentsEl.appendChild(empty);
+      }
+    }
+
+    function renderBacklogList(rows) {
+      backlogListEl.innerHTML = "";
+
+      const backlogRows = [...rows]
+        .filter((row) => row.total > 0 && row.assigned < row.total)
+        .map((row) => ({ ...row, remaining: row.total - row.assigned }))
+        .sort((a, b) => (b.remaining - a.remaining) || (Number(a.section) - Number(b.section)))
+        .slice(0, 5);
+
+      if (backlogRows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "mini-item";
+        empty.innerHTML = `
+          <div class="mini-main">All shelf groups complete</div>
+          <div class="mini-sub">Every active shelf group has been fully assigned.</div>
+        `;
+        backlogListEl.appendChild(empty);
+        return;
+      }
+
+      backlogRows.forEach((row) => {
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        item.innerHTML = `
+          <div class="mini-row">
+            <div class="mini-main">Shelf ${escapeHtml(row.section)}</div>
+            <div class="mini-value">${escapeHtml(String(row.remaining))} left</div>
+          </div>
+          <div class="mini-sub">${escapeHtml(String(row.assigned))} assigned of ${escapeHtml(String(row.total))}</div>
+        `;
+        backlogListEl.appendChild(item);
+      });
+    }
+
+    function renderRangeGrid(rows) {
+      rangeGridEl.innerHTML = "";
+
+      const ranges = [
+        { label: "1-8", start: 1, end: 8 },
+        { label: "9-16", start: 9, end: 16 },
+        { label: "17-24", start: 17, end: 24 },
+        { label: "25-32", start: 25, end: 32 }
+      ];
+
+      ranges.forEach((range) => {
+        const slice = rows.filter((row) => {
+          const section = Number(row.section);
+          return section >= range.start && section <= range.end;
+        });
+        const assigned = slice.reduce((sum, row) => sum + row.assigned, 0);
+        const total = slice.reduce((sum, row) => sum + row.total, 0);
+        const percent = total > 0 ? ((assigned / total) * 100).toFixed(1) : "0.0";
+
+        const item = document.createElement("div");
+        item.className = "mini-item";
+        item.innerHTML = `
+          <div class="mini-row">
+            <div class="mini-main">${range.label}</div>
+            <div class="mini-value">${percent}%</div>
+          </div>
+          <div class="mini-sub">${assigned} assigned of ${total}</div>
+        `;
+        rangeGridEl.appendChild(item);
+      });
+    }
+
+    function renderResults() {
+      resultsEl.innerHTML = "";
+
+      if (state.results.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "results-header";
+        empty.textContent = "No results yet.";
+        resultsEl.appendChild(empty);
+        assignButton.disabled = true;
+        return;
+      }
+
+      state.results.forEach((album, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `result-item ${index === state.selectedIndex ? "active" : ""}`.trim();
+        button.innerHTML = `
+          <strong>${escapeHtml(album.artist || "Unknown artist")}</strong>
+          <span class="meta">${escapeHtml(album.title || "Untitled")} | ID ${album.id}</span>
+          <span class="meta">New shelf: ${escapeHtml(album.new_shelf || "--")} | Current barcode: ${escapeHtml(album.barcode || "none")}</span>
+        `;
+        button.addEventListener("click", () => {
+          state.selectedIndex = index;
+          renderResults();
+          updateAssignButton();
+        });
+        resultsEl.appendChild(button);
+      });
+
+      updateAssignButton();
+    }
+
+    function updateAssignButton() {
+      const selectedAlbum = state.results[state.selectedIndex];
+      assignButton.disabled = !state.assignBarcode || !selectedAlbum;
+    }
+
+    function renderProgress() {
+      progressListEl.innerHTML = "";
+
+      if (state.progress.length === 0) {
+        progressAssignedEl.textContent = "--";
+        progressAssignedNoteEl.textContent = "--";
+        progressOverallEl.textContent = "--";
+        progressOverallNoteEl.textContent = "--";
+        progressStartedEl.textContent = "--";
+        progressStartedNoteEl.textContent = "--";
+        progressCompleteEl.textContent = "--";
+        progressCompleteNoteEl.textContent = "--";
+        progressLeaderEl.textContent = "--";
+        progressLeaderNoteEl.textContent = "--";
+        progressBacklogEl.textContent = "--";
+        progressBacklogNoteEl.textContent = "--";
+        renderBacklogList([]);
+        renderRangeGrid([]);
+        return;
+      }
+
+      const totals = state.progress.reduce(
+        (acc, row) => {
+          acc.assigned += row.assigned;
+          acc.total += row.total;
+          return acc;
+        },
+        { assigned: 0, total: 0 }
+      );
+
+      const overallPercent = totals.total > 0 ? ((totals.assigned / totals.total) * 100).toFixed(1) : "0.0";
+      const started = state.progress.filter((row) => row.assigned > 0).length;
+      const complete = state.progress.filter((row) => row.total > 0 && row.assigned >= row.total).length;
+      const activeShelves = state.progress.filter((row) => row.total > 0).length;
+      const leader = [...state.progress]
+        .filter((row) => row.total > 0)
+        .sort((a, b) => (b.percent - a.percent) || (b.assigned - a.assigned) || (Number(a.section) - Number(b.section)))[0];
+      const backlog = [...state.progress]
+        .filter((row) => row.total > 0)
+        .map((row) => ({ ...row, remaining: row.total - row.assigned }))
+        .sort((a, b) => (b.remaining - a.remaining) || (Number(a.section) - Number(b.section)))[0];
+
+      progressAssignedEl.textContent = `${totals.assigned} / ${totals.total}`;
+      progressAssignedNoteEl.textContent = `${Math.max(0, totals.total - totals.assigned)} still need barcode assignment`;
+      progressOverallEl.textContent = `${overallPercent}%`;
+      progressOverallNoteEl.textContent = `Across shelf groups 1-32`;
+      progressStartedEl.textContent = `${started}`;
+      progressStartedNoteEl.textContent = `${started} of ${activeShelves} shelf groups have at least one assignment`;
+      progressCompleteEl.textContent = `${complete}`;
+      progressCompleteNoteEl.textContent = `${activeShelves - complete} groups still need barcode assignment`;
+      progressLeaderEl.textContent = leader ? `#${leader.section}` : "--";
+      progressLeaderNoteEl.textContent = leader ? `${leader.percent}% assigned (${leader.assigned}/${leader.total})` : "--";
+      progressBacklogEl.textContent = backlog ? `#${backlog.section}` : "--";
+      progressBacklogNoteEl.textContent = backlog ? `${backlog.remaining} still unassigned (${backlog.assigned}/${backlog.total} done)` : "--";
+      renderBacklogList(state.progress);
+      renderRangeGrid(state.progress);
+
+      state.progress.forEach((row) => {
+        const item = document.createElement("div");
+        item.className = "progress-item";
+        item.innerHTML = `
+          <div class="progress-row">
+            <div class="progress-shelf">Shelf ${escapeHtml(row.section)}</div>
+            <div class="progress-percent">${escapeHtml(String(row.percent))}%</div>
+          </div>
+          <div class="progress-meta">${escapeHtml(String(row.assigned))} assigned of ${escapeHtml(String(row.total))}</div>
+          <div class="progress-track">
+            <div class="progress-fill" style="width: ${Math.max(0, Math.min(100, Number(row.percent) || 0))}%;"></div>
+          </div>
+        `;
+        progressListEl.appendChild(item);
+      });
+    }
+
+    async function loadProgress() {
+      try {
+        const data = await fetchJson("/progress");
+        state.progress = Array.isArray(data)
+          ? data.filter((row) => {
+              const section = Number(row.section);
+              return Number.isInteger(section) && section >= 1 && section <= 32;
+            })
+          : [];
+        renderProgress();
+        setProgressStatus("");
+      } catch (error) {
+        state.progress = [];
+        renderProgress();
+        setProgressStatus("Progress failed to load. Restart `node server.js` to pick up the new `/progress` endpoint.", "error");
+      }
+    }
+
+    async function searchAlbums(query) {
+      const trimmed = query.trim();
+
+      if (!trimmed) {
+        state.results = [];
+        state.selectedIndex = -1;
+        renderResults();
+        setAssignStatus(state.assignBarcode ? "Barcode captured. Search for the album." : "");
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          q: trimmed,
+          unassigned: state.unassignedOnly ? "1" : "0"
+        });
+        const albums = await fetchJson(`/search?${params.toString()}`);
+        state.results = Array.isArray(albums) ? albums : [];
+        state.selectedIndex = state.results.length > 0 ? 0 : -1;
+        renderResults();
+
+        const selectedAlbum = state.results[state.selectedIndex];
+        if (selectedAlbum && selectedAlbum.barcode) {
+          setAssignStatus(`Warning: selected result already has barcode ${selectedAlbum.barcode}.`, "warning");
+        } else {
+          setAssignStatus(`${state.results.length} result(s).`, "");
+        }
+      } catch (error) {
+        state.results = [];
+        state.selectedIndex = -1;
+        renderResults();
+        setAssignStatus("Search failed.", "error");
+      }
+    }
+
+    async function assignSelectedAlbum() {
+      const album = state.results[state.selectedIndex];
+      const barcode = state.assignBarcode;
+
+      if (!barcode) {
+        setAssignStatus("Scan a barcode first.", "warning");
+        barcodeInput.focus();
+        return;
+      }
+
+      if (!album) {
+        setAssignStatus("Select an album first.", "warning");
+        return;
+      }
+
+      try {
+        const data = await fetchJson("/assign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            barcode,
+            albumId: album.id
+          })
+        });
+
+        setAssignStatus(`Assigned barcode ${barcode} to ${data.album.artist} - ${data.album.title}.`, "success");
+        state.sessionAssigned += 1;
+        state.recentAssignments.unshift({
+          barcode,
+          id: data.album.id,
+          artist: data.album.artist,
+          title: data.album.title,
+          assigned_at: data.album.assigned_at
+        });
+        state.recentAssignments = state.recentAssignments.slice(0, 8);
+        state.assignBarcode = "";
+        barcodeInput.value = "";
+        searchInput.value = "";
+        state.results = [];
+        state.selectedIndex = -1;
+        renderResults();
+        renderRecentAssignments();
+        updateSessionWidgets();
+        loadProgress();
+        loadHistory();
+        barcodeInput.focus();
+      } catch (error) {
+        if (error.data?.existingBarcode) {
+          setAssignStatus(`Album already has barcode ${error.data.existingBarcode}.`, "warning");
+        } else if (error.data?.existingAlbum) {
+          setAssignStatus(
+            `Barcode already belongs to ${error.data.existingAlbum.artist} - ${error.data.existingAlbum.title}.`,
+            "error"
+          );
+        } else {
+          setAssignStatus(error.message || "Assignment failed.", "error");
+        }
+        barcodeInput.focus();
+      }
+    }
+
+    async function undoLastAssignment() {
+      try {
+        const data = await fetchJson("/undo-last-assignment", { method: "POST" });
+
+        setAssignStatus(`Undid barcode ${data.assignment.barcode} from ${data.assignment.artist} - ${data.assignment.title}.`, "warning");
+        state.assignBarcode = "";
+        barcodeInput.value = "";
+        updateSessionWidgets();
+        if (searchInput.value.trim()) {
+          searchAlbums(searchInput.value);
+        } else {
+          state.results = [];
+          state.selectedIndex = -1;
+          renderResults();
+        }
+        loadProgress();
+        loadHistory();
+        barcodeInput.focus();
+      } catch (error) {
+        setAssignStatus(error.message || "Undo failed.", "error");
+      }
+    }
+
+    function resetAssignPanel() {
+      state.assignBarcode = "";
+      state.results = [];
+      state.selectedIndex = -1;
+      barcodeInput.value = "";
+      searchInput.value = "";
+      renderResults();
+      setAssignStatus("");
+      updateSessionWidgets();
+      barcodeInput.focus();
+    }
+
+    function setSortOutput(album) {
+      sortOutput.innerHTML = `
+        <div class="sort-label">Place Album On</div>
+        <div class="sort-artist">${escapeHtml(album.artist || "Unknown artist")}</div>
+        <div class="sort-title">${escapeHtml(album.title || "Untitled")}</div>
+        <div class="sort-shelf">${escapeHtml(album.new_shelf || "--")}</div>
+      `;
+    }
+
+    async function lookupBarcode(barcode) {
+      try {
+        const data = await fetchJson(`/lookup/${encodeURIComponent(barcode)}`);
+
+        setSortStatus("");
+        setSortOutput(data);
+      } catch (error) {
+        setSortStatus("Barcode not found.", "error");
+        setSortOutput({
+          artist: "No match",
+          title: "Check the scan or assign this barcode first.",
+          new_shelf: "--"
+        });
+      } finally {
+        sortBarcodeInput.value = "";
+        sortBarcodeInput.focus();
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function formatDateTime(value) {
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return value;
+      }
+
+      return parsed.toLocaleString([], {
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+    }
+
+    async function fetchJson(path, options) {
+      const url = new URL(path, window.location.origin).toString();
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = {};
+
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          throw new Error(text.slice(0, 120) || `HTTP ${response.status}`);
+        }
+      }
+
+      if (!response.ok) {
+        const requestError = new Error(data.error || `HTTP ${response.status}`);
+        requestError.data = data;
+        throw requestError;
+      }
+
+      return data;
+    }
+
+    assignTab.addEventListener("click", () => setMode("assign"));
+    sortTab.addEventListener("click", () => setMode("sort"));
+
+    barcodeInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      state.assignBarcode = barcodeInput.value.trim();
+      updateAssignButton();
+      updateSessionWidgets();
+
+      if (!state.assignBarcode) {
+        setAssignStatus("Scan a barcode first.", "warning");
+        return;
+      }
+
+      setAssignStatus(`Barcode ${state.assignBarcode} captured. Search for the matching album.`);
+      searchInput.focus();
+      searchInput.select();
+    });
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(() => {
+        searchAlbums(searchInput.value);
+      }, 100);
+    });
+
+    unassignedOnlyToggle.addEventListener("change", () => {
+      state.unassignedOnly = unassignedOnlyToggle.checked;
+      if (searchInput.value.trim()) {
+        searchAlbums(searchInput.value);
+      }
+    });
+
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        if (state.results.length > 0) {
+          state.selectedIndex = Math.min(state.selectedIndex + 1, state.results.length - 1);
+          renderResults();
+        }
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (state.results.length > 0) {
+          state.selectedIndex = Math.max(state.selectedIndex - 1, 0);
+          renderResults();
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (state.results[state.selectedIndex] && state.assignBarcode) {
+          assignSelectedAlbum();
+        }
+      }
+    });
+
+    assignButton.addEventListener("click", assignSelectedAlbum);
+    clearButton.addEventListener("click", resetAssignPanel);
+    undoButton.addEventListener("click", undoLastAssignment);
+
+    sortBarcodeInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      const barcode = sortBarcodeInput.value.trim();
+      if (!barcode) {
+        return;
+      }
+
+      setSortStatus("Looking up barcode...");
+      lookupBarcode(barcode);
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "F1") {
+        event.preventDefault();
+        setMode("assign");
+      }
+
+      if (event.key === "F2") {
+        event.preventDefault();
+        setMode("sort");
+      }
+    });
+
+    renderResults();
+    loadHistory();
+    updateSessionWidgets();
+    loadProgress();
+    setMode(window.location.hash === "#sort" ? "sort" : "assign");
+  </script>
+</body>
+</html>
