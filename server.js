@@ -55,6 +55,7 @@ function resolveAlbumTable() {
 
   for (const tableName of tables) {
     const columns = getTableColumns(tableName).map((column) => column.name);
+
     const artistColumn = columns.includes("artist") ? "artist" : null;
     const titleColumn = columns.includes("title") ? "title" : null;
     const idColumn = columns.includes("id")
@@ -62,16 +63,22 @@ function resolveAlbumTable() {
       : columns.includes("index")
         ? "index"
         : null;
+
     const currentShelfColumn = columns.includes("current_shelf")
       ? "current_shelf"
       : columns.includes("old")
         ? "old"
-        : null;
+        : columns.includes("shelf_label")
+          ? "shelf_label"
+          : null;
+
     const newShelfColumn = columns.includes("new_shelf")
       ? "new_shelf"
       : columns.includes("shelf")
         ? "shelf"
-        : null;
+        : columns.includes("new_shelf_label")
+          ? "new_shelf_label"
+          : null;
 
     if (artistColumn && titleColumn && idColumn) {
       return {
