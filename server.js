@@ -74,10 +74,10 @@ function resolveAlbumTable() {
 
     const newShelfColumn = columns.includes("new_shelf")
       ? "new_shelf"
-      : columns.includes("shelf")
-        ? "shelf"
-        : columns.includes("new_shelf_label")
-          ? "new_shelf_label"
+      : columns.includes("new_shelf_label")
+        ? "new_shelf_label"
+        : columns.includes("shelf")
+          ? "shelf"
           : null;
 
     if (artistColumn && titleColumn && idColumn) {
@@ -170,9 +170,18 @@ const searchStmt = db.prepare(
   `
 );
 
-const lookupShelfSelect = quotedNewShelfColumn
-  ? `${quotedNewShelfColumn} AS new_shelf`
-  : "NULL AS new_shelf";
+const quotedNewShelfLabelColumn = hasColumn(existingColumns, "new_shelf_label")
+  ? quoteIdentifier("new_shelf_label")
+  : null;
+
+const lookupShelfSelect =
+  quotedNewShelfColumn && quotedNewShelfLabelColumn
+    ? `COALESCE(${quotedNewShelfColumn}, ${quotedNewShelfLabelColumn}) AS new_shelf`
+    : quotedNewShelfColumn
+      ? `${quotedNewShelfColumn} AS new_shelf`
+      : quotedNewShelfLabelColumn
+        ? `${quotedNewShelfLabelColumn} AS new_shelf`
+        : "NULL AS new_shelf";
 
 const lookupByBarcodeStmt = db.prepare(
   `
