@@ -72,8 +72,8 @@ function resolveAlbumTable() {
           ? "shelf_label"
           : null;
 
-    const newShelfColumn = columns.includes("new_shelf")
-      ? "new_shelf"
+    const newShelfColumn = columns.includes("new_shelf_label")
+      ? "new_shelf_label"
       : columns.includes("new_shelf_label")
         ? "new_shelf_label"
         : columns.includes("shelf")

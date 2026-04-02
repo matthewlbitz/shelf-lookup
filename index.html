@@ -1049,7 +1049,6 @@
         state.results = Array.isArray(albums) ? albums : [];
         state.selectedIndex = state.results.length > 0 ? 0 : -1;
         renderResults();
-
         const selectedAlbum = state.results[state.selectedIndex];
         if (selectedAlbum && selectedAlbum.barcode) {
           setAssignStatus(`Warning: selected result already has barcode ${selectedAlbum.barcode}.`, "warning");
@@ -1089,8 +1088,7 @@
           })
         });
 
-        setAssignStatus(`Assigned barcode ${barcode} to ${data.album.artist} - ${data.album.title}.`, "success");
-        state.sessionAssigned += 1;
+        setAssignStatus(`Assigned barcode ${barcode} to ${(data.album?.artist ?? data.artist)} - ${(data.album?.title ?? data.title)}. - Shelf ${(album.new_shelf ?? "--")}`, "success");        state.sessionAssigned += 1;
         state.recentAssignments.unshift({
           barcode,
           id: data.album.id,
