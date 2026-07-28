@@ -434,6 +434,21 @@ app.post("/assign", (req, res) => {
   });
 });
 
+app.get("/check-barcode/:barcode", (req, res) => {
+  const barcode = String(req.params.barcode || "").trim();
+
+  if (!barcode) {
+    return res.status(400).json({ error: "Barcode is required." });
+  }
+
+  const barcodeOwner = lookupBarcodeOwnerStmt.get(barcode);
+
+  return res.json({
+    assigned: !!barcodeOwner,
+    album: barcodeOwner || null
+  });
+});
+
 app.post("/undo-last-assignment", (_req, res) => {
   try {
     const latest = latestHistoryStmt.get();

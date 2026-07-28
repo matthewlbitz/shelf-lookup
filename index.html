@@ -222,6 +222,22 @@
       overflow: hidden;
       min-height: 360px;
     }
+    
+    .queue-list {
+      max-height: 180px;
+      overflow-y: auto;
+
+      border: 1px solid var(--border);
+      border-radius: 12px;
+
+      background: var(--panel);
+    }
+
+    .queue-item {
+      padding: 6px 12px;
+      font-size: 0.95rem;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
 
     .results-header {
       padding: 12px 14px;
@@ -449,6 +465,64 @@
       padding-top: 12px;
     }
 
+    .stack-list {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+
+      max-height: 180px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .stack-list::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .stack-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .stack-list::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.18);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+
+    .stack-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,.35);
+      background-clip: content-box;
+    }
+
+    .stack-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      padding: 6px 12px;
+
+      font-size: 0.9rem;
+
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+
+    .stack-item.next {
+      position: sticky;
+      top: 0;
+
+      background: rgba(124,92,255,.18);
+      backdrop-filter: blur(8px);
+
+      font-weight: 600;
+
+      z-index: 5;
+    }
+
+    .stack-item:last-child {
+      border-bottom: none;
+    }
+
     .dashboard-title {
       margin: 0 0 10px;
       font-size: 13px;
@@ -579,6 +653,24 @@
 
               <div id="assignStatus" class="status"></div>
               <div class="hint">Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.</div>
+              <div class="field">
+                <label>Barcode Queue</label>
+                
+                <div class="assign-actions" style="margin-top:10px;">
+                  <button id="removeScanButton" class="secondary" type="button">
+                    Remove Last Scan
+                  </button>
+              
+                  <button id="clearQueueButton" class="secondary" type="button">
+                    Clear Queue
+                  </button>
+                </div>
+
+                <div id="barcodeQueue" class="queue-list">
+                  <div class="results-header">No barcodes scanned.</div>
+                </div>
+            
+              </div>
             </div>
 
             <div class="results" id="resultsBox">
@@ -693,7 +785,7 @@
   <script>
     const state = {
       mode: "assign",
-      assignBarcode: "",
+      barcodeQueue: [],
       results: [],
       selectedIndex: -1,
       searchTimer: null,
@@ -709,6 +801,9 @@
     const sortPanel = document.getElementById("sortPanel");
 
     const barcodeInput = document.getElementById("barcodeInput");
+    const barcodeQueueEl = document.getElementById("barcodeQueue");
+    const removeScanButton = document.getElementById("removeScanButton");
+    const clearQueueButton = document.getElementById("clearQueueButton");
     const searchInput = document.getElementById("searchInput");
     const unassignedOnlyToggle = document.getElementById("unassignedOnlyToggle");
     const assignButton = document.getElementById("assignButton");
@@ -778,10 +873,11 @@
       sessionAssignedNoteEl.textContent = state.sessionAssigned === 1
         ? "1 assignment since page load"
         : `${state.sessionAssigned} assignments since page load`;
-      sessionBarcodeEl.textContent = state.assignBarcode || "--";
-      sessionBarcodeNoteEl.textContent = state.assignBarcode
-        ? "Buffered and ready to attach"
-        : "Waiting for next scan";
+        sessionBarcodeEl.textContent = state.barcodeQueue[0] || "--";
+        sessionBarcodeNoteEl.textContent =
+          state.barcodeQueue.length === 0
+            ? "Waiting for next scan"
+            : `${state.barcodeQueue.length} barcode(s) queued`;
     }
 
     function renderRecentAssignments() {
@@ -810,6 +906,36 @@
         `;
         recentAssignmentsEl.appendChild(row);
       });
+    }
+
+    function renderBarcodeQueue() {
+
+      if (state.barcodeQueue.length === 0) {
+        barcodeQueueEl.innerHTML =
+          `<div class="results-header">No barcodes scanned.</div>`;
+        return;
+      }
+
+      barcodeQueueEl.innerHTML = `
+        <div class="results-header">
+          ${state.barcodeQueue.length} barcode(s) queued
+        </div>
+      `;
+
+      state.barcodeQueue.forEach((barcode, index) => {
+
+        const row = document.createElement("div");
+        row.className = "queue-item";
+
+        row.innerHTML = `
+          <strong>${index === 0 ? "▶ NEXT" : "&nbsp;&nbsp;&nbsp;"}</strong>
+          <span class="meta">${escapeHtml(barcode)}</span>
+        `;
+
+        barcodeQueueEl.appendChild(row);
+
+      });
+
     }
 
     async function loadHistory() {
@@ -934,7 +1060,8 @@
 
     function updateAssignButton() {
       const selectedAlbum = state.results[state.selectedIndex];
-      assignButton.disabled = !state.assignBarcode || !selectedAlbum;
+      assignButton.disabled =
+        state.barcodeQueue.length === 0 || !selectedAlbum;
     }
 
     function renderProgress() {
@@ -1036,7 +1163,11 @@
         state.results = [];
         state.selectedIndex = -1;
         renderResults();
-        setAssignStatus(state.assignBarcode ? "Barcode captured. Search for the album." : "");
+        setAssignStatus(
+        state.barcodeQueue.length > 0
+            ? "Barcode queue ready. Search for the album."
+            : ""
+        );
         return;
       }
 
@@ -1065,7 +1196,7 @@
 
     async function assignSelectedAlbum() {
       const album = state.results[state.selectedIndex];
-      const barcode = state.assignBarcode;
+      const barcode = state.barcodeQueue[0];
 
       if (!barcode) {
         setAssignStatus("Scan a barcode first.", "warning");
@@ -1097,8 +1228,11 @@
           assigned_at: data.album.assigned_at
         });
         state.recentAssignments = state.recentAssignments.slice(0, 8);
-        state.assignBarcode = "";
+        state.barcodeQueue.shift();
         barcodeInput.value = "";
+
+        renderBarcodeQueue();
+        updateAssignButton();
         searchInput.value = "";
         state.results = [];
         state.selectedIndex = -1;
@@ -1107,7 +1241,9 @@
         updateSessionWidgets();
         loadProgress();
         loadHistory();
-        barcodeInput.focus();
+        searchInput.value = "";
+        searchInput.focus();
+        searchInput.select();
       } catch (error) {
         if (error.data?.existingBarcode) {
           setAssignStatus(`Album already has barcode ${error.data.existingBarcode}.`, "warning");
@@ -1128,8 +1264,8 @@
         const data = await fetchJson("/undo-last-assignment", { method: "POST" });
 
         setAssignStatus(`Undid barcode ${data.assignment.barcode} from ${data.assignment.artist} - ${data.assignment.title}.`, "warning");
-        state.assignBarcode = "";
         barcodeInput.value = "";
+        renderBarcodeQueue();
         updateSessionWidgets();
         if (searchInput.value.trim()) {
           searchAlbums(searchInput.value);
@@ -1147,12 +1283,13 @@
     }
 
     function resetAssignPanel() {
-      state.assignBarcode = "";
+      state.barcodeQueue = [];
       state.results = [];
       state.selectedIndex = -1;
       barcodeInput.value = "";
       searchInput.value = "";
       renderResults();
+      renderBarcodeQueue();
       setAssignStatus("");
       updateSessionWidgets();
       barcodeInput.focus();
@@ -1235,23 +1372,76 @@
     assignTab.addEventListener("click", () => setMode("assign"));
     sortTab.addEventListener("click", () => setMode("sort"));
 
-    barcodeInput.addEventListener("keydown", (event) => {
+    barcodeInput.addEventListener("keydown", async (event) => {
       if (event.key !== "Enter") {
         return;
       }
 
-      state.assignBarcode = barcodeInput.value.trim();
-      updateAssignButton();
-      updateSessionWidgets();
+      const barcode = barcodeInput.value.trim();
 
-      if (!state.assignBarcode) {
+      if (!barcode) {
         setAssignStatus("Scan a barcode first.", "warning");
         return;
       }
 
-      setAssignStatus(`Barcode ${state.assignBarcode} captured. Search for the matching album.`);
-      searchInput.focus();
-      searchInput.select();
+      if (state.barcodeQueue.includes(barcode)) {
+        setAssignStatus(`Barcode ${barcode} is already in the queue.`, "warning");
+        barcodeInput.value = "";
+        barcodeInput.focus();
+        return;
+      }
+
+      try {
+        const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
+
+        if (data.assigned) {
+          setAssignStatus(
+            `Barcode ${barcode} is already assigned.`,
+            "warning"
+          );
+          barcodeInput.value = "";
+          barcodeInput.focus();
+          return;
+        }
+      } catch (error) {
+        setAssignStatus("Could not check barcode.", "error");
+        return;
+      }
+
+      if (state.barcodeQueue.includes(barcode)) {
+        setAssignStatus(`Barcode ${barcode} is already in the queue.`, "warning");
+        barcodeInput.value = "";
+        barcodeInput.focus();
+        return;
+      }
+
+      try {
+        const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
+
+        if (data.assigned) {
+          setAssignStatus(`Barcode ${barcode} is already assigned.`, "warning");
+          barcodeInput.value = "";
+          barcodeInput.focus();
+          return;
+        }
+      } catch (error) {
+        setAssignStatus("Could not check barcode.", "error");
+        return;
+      }
+
+      state.barcodeQueue.unshift(barcode);
+
+      barcodeInput.value = "";
+
+      renderBarcodeQueue();
+      updateAssignButton();
+      updateSessionWidgets();
+
+      setAssignStatus(
+        `Barcode ${barcode} added to queue (${state.barcodeQueue.length} queued).`
+      );
+
+      barcodeInput.focus();
     });
 
     searchInput.addEventListener("input", () => {
@@ -1289,7 +1479,7 @@
 
       if (event.key === "Enter") {
         event.preventDefault();
-        if (state.results[state.selectedIndex] && state.assignBarcode) {
+        if (state.results[state.selectedIndex] && state.barcodeQueue.length > 0) {
           assignSelectedAlbum();
         }
       }
@@ -1298,6 +1488,32 @@
     assignButton.addEventListener("click", assignSelectedAlbum);
     clearButton.addEventListener("click", resetAssignPanel);
     undoButton.addEventListener("click", undoLastAssignment);
+
+    removeScanButton.addEventListener("click", () => {
+
+      if (state.barcodeQueue.length === 0) {
+        return;
+      }
+
+      const removed = state.barcodeQueue.shift();
+
+      renderBarcodeQueue();
+      updateAssignButton();
+      updateSessionWidgets();
+
+      setAssignStatus(`Removed barcode ${removed} from the queue.`);
+      });
+
+      clearQueueButton.addEventListener("click", () => {
+
+      state.barcodeQueue = [];
+
+      renderBarcodeQueue();
+      updateAssignButton();
+      updateSessionWidgets();
+
+      setAssignStatus("Barcode queue cleared.");
+    });
 
     sortBarcodeInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") {
@@ -1325,6 +1541,7 @@
       }
     });
 
+    renderResults();
     renderResults();
     loadHistory();
     updateSessionWidgets();
