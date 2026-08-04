@@ -74,6 +74,27 @@ body {
     text-transform: uppercase;
 }
 
+.back-link {
+    align-self: flex-start;
+    margin: 0 0 16px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #111;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+    border-color: var(--accent);
+    background: rgba(218, 165, 32, .12);
+}
+
 h1,
 h2 {
     margin: 0;
@@ -312,6 +333,7 @@ button:focus-visible {
         <section class="panel sorting-panel" aria-labelledby="sorterTitle">
             <p class="panel-kicker">Shelf organizer</p>
             <h1 id="sorterTitle">Artist sorter</h1>
+            <a class="back-link" href="/">Back to organizer</a>
             <p class="sort-instruction">Click the word that should determine filing order.</p>
 
             <div id="artist" aria-label="Artist name"></div>

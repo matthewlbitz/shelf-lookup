@@ -241,6 +241,7 @@ const lookupByIdStmt = db.prepare(
       ${quotedIdColumn} AS id,
       ${quotedArtistColumn} AS artist,
       ${quotedTitleColumn} AS title,
+      ${lookupShelfSelect},
       ${quotedBarcodeColumn} AS barcode,
       ${quotedAssignedAtColumn} AS assigned_at
     FROM ${quotedTable}
@@ -514,7 +515,11 @@ app.get("/artist-sorter", (req, res) => {
 });
 
 app.get("/cover-matcher", (_req, res) => {
-  res.sendFile(path.join(__dirname, "cover-matcher.html"));
+  res.redirect("/batch-capture");
+});
+
+app.get("/batch-capture", (_req, res) => {
+  res.sendFile(path.join(__dirname, "batch-capture.html"));
 });
 
 function normalizeMatchText(value) {
@@ -807,6 +812,7 @@ app.post("/assign", (req, res) => {
       id: album.id,
       artist: album.artist,
       title: album.title,
+      new_shelf: album.new_shelf,
       barcode,
       assigned_at: assignedAt,
     },
