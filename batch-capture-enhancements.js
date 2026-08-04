@@ -1,6 +1,13 @@
 state.assigned = [];
 state.shelfIndex = 0;
 
+// The physical pass reverses the stack twice. Capture is LIFO (last barcode
+// first), review reverses those captures, and shelf placement is LIFO again.
+document.querySelector("#scanPhase .note").textContent =
+  "Scan the initial pile in order. Put each record onto the capture pile; the last barcode scanned is next to photograph.";
+document.querySelector("#reviewPhase .note").innerHTML =
+  '<span class="key">↑</span>/<span class="key">↓</span> choose · <span class="key">Enter</span> assign · <span class="key">Esc</span> discard. Review runs in the original scan order.';
+
 const shelfPhase = document.createElement("section");
 shelfPhase.className = "panel phase";
 shelfPhase.id = "shelfPhase";
@@ -46,7 +53,7 @@ function renderShelfStep() {
 
   shelfPhase.innerHTML = `
     <h2>4 · Place album</h2>
-    <div class="note">${state.shelfIndex + 1} of ${state.assigned.length} · Press Space for next album</div>
+    <div class="note">${state.shelfIndex + 1} of ${state.assigned.length} · LIFO order · Press Space for next album</div>
     <div style="margin-top:24px;font-size:clamp(28px,5vw,54px);font-weight:bold">${esc(item.artist)}</div>
     <div style="margin-top:8px;font-size:clamp(20px,3vw,34px);color:var(--muted)">${esc(item.title)}</div>
     <div style="margin:30px 0;font-size:clamp(60px,12vw,130px);font-weight:bold;color:var(--accent)">${esc(item.new_shelf || "--")}</div>
@@ -70,6 +77,7 @@ async function batchAssignCurrent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ barcode: item.barcode, albumId: album.id }),
     });
+    // Keep assignments in review order so Step 4 also displays 1 → 5.
     state.assigned.push({ ...response.album, barcode: item.barcode });
     item.image = null;
     state.captures.splice(state.reviewIndex, 1);
@@ -95,6 +103,22 @@ function reviewIndexAfterRemove(message) {
 }
 
 assign.onclick = batchAssignCurrent;
+
+function prepareOriginalReviewOrder() {
+  if (
+    capturePhase.classList.contains("active") &&
+    state.captures.length + 1 === state.barcodes.length
+  ) {
+    // The final capture completes [5, 4, 3, 2, 1]. Start review at 1.
+    state.reviewIndex = state.barcodes.length - 1;
+  }
+}
+
+const originalCaptureClick = capture.onclick;
+capture.onclick = (event) => {
+  prepareOriginalReviewOrder();
+  return originalCaptureClick.call(capture, event);
+};
 manualSearch.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && state.selectedIndex >= 0) {
     event.preventDefault();
@@ -104,6 +128,9 @@ manualSearch.addEventListener("keydown", (event) => {
 }, true);
 
 document.addEventListener("keydown", (event) => {
+  if (capturePhase.classList.contains("active") && event.code === "Space") {
+    prepareOriginalReviewOrder();
+  }
   if (shelfPhase.classList.contains("active") && event.code === "Space") {
     event.preventDefault();
     document.getElementById("nextShelf")?.click();
