@@ -1,4 +1,8 @@
 const path = require("path");
+const fs = require("fs/promises");
+const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 const express = require("express");
 const Database = require("better-sqlite3");
 
@@ -6,6 +10,10 @@ const PORT = 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "masterAlbums.db");
 const SHELF_GROUP_MAX = 32;
 const HISTORY_LIMIT = 10;
+const ARTIST_SORT_RECENT_LIMIT = 15;
+const COVER_MATCH_LIMIT = 12;
+const OCR_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 const db = new Database(DB_PATH);
 
@@ -107,6 +115,8 @@ const quotedArtistColumn = quoteIdentifier(schema.artistColumn);
 const quotedTitleColumn = quoteIdentifier(schema.titleColumn);
 const quotedBarcodeColumn = quoteIdentifier(schema.barcodeColumn);
 const quotedAssignedAtColumn = quoteIdentifier(schema.assignedAtColumn);
+const artistSortColumn = "artist_sort";
+const quotedArtistSortColumn = quoteIdentifier(artistSortColumn);
 const quotedCurrentShelfColumn = schema.currentShelfColumn
   ? quoteIdentifier(schema.currentShelfColumn)
   : null;
@@ -126,12 +136,29 @@ if (!hasColumn(existingColumns, schema.assignedAtColumn)) {
   );
 }
 
+if (!hasColumn(existingColumns, artistSortColumn)) {
+  db.exec(
+    `ALTER TABLE ${quotedTable} ADD COLUMN ${quotedArtistSortColumn} TEXT`
+  );
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS assignment_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     album_id INTEGER NOT NULL,
     barcode TEXT NOT NULL,
     assigned_at TEXT NOT NULL,
+    undone_at TEXT
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS artist_sort_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artist TEXT NOT NULL,
+    artist_sort TEXT NOT NULL,
+    previous_values TEXT NOT NULL,
+    sorted_at TEXT NOT NULL,
     undone_at TEXT
   )
 `);
@@ -167,6 +194,18 @@ const searchStmt = db.prepare(
        OR ${quotedTitleColumn} LIKE @pattern
     ORDER BY ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE
     LIMIT 20
+  `
+);
+
+const coverMatchAlbumsStmt = db.prepare(
+  `
+    SELECT
+      ${quotedIdColumn} AS id,
+      ${quotedArtistColumn} AS artist,
+      ${quotedTitleColumn} AS title,
+      ${quotedBarcodeColumn} AS barcode
+    FROM ${quotedTable}
+    ORDER BY ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE
   `
 );
 
@@ -265,6 +304,23 @@ const latestHistoryStmt = db.prepare(
   `
 );
 
+const historyByIdStmt = db.prepare(
+  `
+    SELECT
+      h.id,
+      h.album_id,
+      h.barcode,
+      h.assigned_at,
+      ${quotedArtistColumn} AS artist,
+      ${quotedTitleColumn} AS title
+    FROM assignment_history h
+    JOIN ${quotedTable} a ON a.${quotedIdColumn} = h.album_id
+    WHERE h.id = ?
+      AND h.undone_at IS NULL
+    LIMIT 1
+  `
+);
+
 const recentHistoryStmt = db.prepare(
   `
     SELECT
@@ -289,6 +345,137 @@ const markHistoryUndoneStmt = db.prepare(
     WHERE id = @id
   `
 );
+
+const nextArtistStmt = db.prepare(`
+    SELECT
+        ${quotedArtistColumn} AS artist
+    FROM ${quotedTable}
+    WHERE (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
+      AND ${quotedArtistColumn} IS NOT NULL
+      AND TRIM(${quotedArtistColumn}) <> ''
+      AND (@skipArtist = '' OR ${quotedArtistColumn} <> @skipArtist)
+    GROUP BY ${quotedArtistColumn}
+    ORDER BY RANDOM()
+    LIMIT 1
+`);
+
+const artistSortRowsStmt = db.prepare(`
+    SELECT
+        ${quotedIdColumn} AS id,
+        ${quotedArtistSortColumn} AS artist_sort
+    FROM ${quotedTable}
+    WHERE ${quotedArtistColumn} = ?
+`);
+
+const saveArtistSortStmt = db.prepare(`
+    UPDATE ${quotedTable}
+    SET ${quotedArtistSortColumn} = ?
+    WHERE ${quotedArtistColumn} = ?
+`);
+
+const artistSortHistoryInsertStmt = db.prepare(`
+    INSERT INTO artist_sort_history (
+        artist,
+        artist_sort,
+        previous_values,
+        sorted_at
+    ) VALUES (
+        @artist,
+        @artistSort,
+        @previousValues,
+        @sortedAt
+    )
+`);
+
+const latestArtistSortHistoryStmt = db.prepare(`
+    SELECT id, artist, artist_sort, previous_values
+    FROM artist_sort_history
+    WHERE undone_at IS NULL
+    ORDER BY id DESC
+    LIMIT 1
+`);
+
+const restoreArtistSortByIdStmt = db.prepare(`
+    UPDATE ${quotedTable}
+    SET ${quotedArtistSortColumn} = @artistSort
+    WHERE ${quotedIdColumn} = @id
+`);
+
+const markArtistSortHistoryUndoneStmt = db.prepare(`
+    UPDATE artist_sort_history
+    SET undone_at = @undoneAt
+    WHERE id = @id
+`);
+
+const recentArtistSortHistoryStmt = db.prepare(`
+    SELECT artist, artist_sort, sorted_at
+    FROM artist_sort_history
+    WHERE undone_at IS NULL
+    ORDER BY id DESC
+    LIMIT ?
+`);
+
+const artistSortProgressStmt = db.prepare(`
+    WITH genre_artists AS (
+        SELECT
+            COALESCE(NULLIF(TRIM(primary_genre), ''), '(No genre)') AS genre,
+            ${quotedArtistColumn} AS artist,
+            MAX(
+                CASE
+                    WHEN ${quotedArtistSortColumn} IS NULL
+                      OR TRIM(${quotedArtistSortColumn}) = '' THEN 1
+                    ELSE 0
+                END
+            ) AS has_unsorted
+        FROM ${quotedTable}
+        WHERE ${quotedArtistColumn} IS NOT NULL
+          AND TRIM(${quotedArtistColumn}) <> ''
+        GROUP BY genre, ${quotedArtistColumn}
+    )
+    SELECT
+        genre,
+        COUNT(*) AS total,
+        SUM(CASE WHEN has_unsorted = 0 THEN 1 ELSE 0 END) AS sorted
+    FROM genre_artists
+    GROUP BY genre
+    ORDER BY genre COLLATE NOCASE
+`);
+
+const saveArtistSort = db.transaction((artist, artistSort) => {
+  const previousValues = artistSortRowsStmt.all(artist);
+  const result = saveArtistSortStmt.run(artistSort, artist);
+
+  artistSortHistoryInsertStmt.run({
+    artist,
+    artistSort,
+    previousValues: JSON.stringify(previousValues),
+    sortedAt: new Date().toISOString(),
+  });
+
+  return result.changes;
+});
+
+const undoArtistSort = db.transaction(() => {
+  const history = latestArtistSortHistoryStmt.get();
+  if (!history) {
+    return null;
+  }
+
+  const previousValues = JSON.parse(history.previous_values);
+  for (const row of previousValues) {
+    restoreArtistSortByIdStmt.run({
+      id: row.id,
+      artistSort: row.artist_sort,
+    });
+  }
+
+  markArtistSortHistoryUndoneStmt.run({
+    id: history.id,
+    undoneAt: new Date().toISOString(),
+  });
+
+  return history;
+});
 
 const shelfGroupExpr = quotedCurrentShelfColumn
   ? `NULLIF(RTRIM(TRIM(${quotedCurrentShelfColumn}), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'), '')`
@@ -317,8 +504,199 @@ const progressStmt = quotedCurrentShelfColumn
 
 const app = express();
 
-app.use(express.json());
+// Cover captures are sent as data URLs; keep the HTTP ceiling slightly above
+// the validated decoded-image limit used by the OCR endpoint.
+app.use(express.json({ limit: "14mb" }));
 app.use(express.static(__dirname));
+
+app.get("/artist-sorter", (req, res) => {
+  res.sendFile(path.join(__dirname, "artist-sorter.html"));
+});
+
+app.get("/cover-matcher", (_req, res) => {
+  res.sendFile(path.join(__dirname, "cover-matcher.html"));
+});
+
+function normalizeMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function matchTokens(value) {
+  return [...new Set(normalizeMatchText(value).split(" ").filter((word) => word.length > 1))];
+}
+
+function scoreCoverMatch(ocrText, album) {
+  const source = normalizeMatchText(ocrText);
+  const artist = normalizeMatchText(album.artist);
+  const title = normalizeMatchText(album.title);
+  const haystack = ` ${source} `;
+  let score = 0;
+  const reasons = [];
+
+  if (artist.length > 2 && haystack.includes(` ${artist} `)) {
+    score += 60;
+    reasons.push("artist phrase");
+  }
+  if (title.length > 2 && haystack.includes(` ${title} `)) {
+    score += 55;
+    reasons.push("title phrase");
+  }
+
+  const artistHits = matchTokens(artist).filter((token) => haystack.includes(` ${token} `));
+  const titleHits = matchTokens(title).filter((token) => haystack.includes(` ${token} `));
+  score += artistHits.length * 14 + titleHits.length * 12;
+  if (artistHits.length) reasons.push(`${artistHits.length} artist word${artistHits.length === 1 ? "" : "s"}`);
+  if (titleHits.length) reasons.push(`${titleHits.length} title word${titleHits.length === 1 ? "" : "s"}`);
+
+  return { score, reasons };
+}
+
+function getOcrCommand() {
+  return process.env.TESSERACT_PATH || "tesseract";
+}
+
+app.get("/api/cover-matcher/status", async (_req, res) => {
+  try {
+    await execFileAsync(getOcrCommand(), ["--version"], { timeout: 5000 });
+    return res.json({ available: true });
+  } catch (_error) {
+    return res.json({
+      available: false,
+      message: "Local OCR needs Tesseract. Install it, then restart this app (or set TESSERACT_PATH).",
+    });
+  }
+});
+
+app.post("/api/cover-matcher/ocr", async (req, res) => {
+  const dataUrl = String(req.body?.image || "");
+  const matched = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!matched) {
+    return res.status(400).json({ error: "Capture a PNG, JPEG, or WebP cover image first." });
+  }
+
+  const image = Buffer.from(matched[2], "base64");
+  if (!image.length || image.length > OCR_MAX_IMAGE_BYTES) {
+    return res.status(400).json({ error: "Image must be between 1 byte and 10 MB." });
+  }
+
+  const extension = matched[1].toLowerCase().includes("png") ? "png" : matched[1].toLowerCase().includes("webp") ? "webp" : "jpg";
+  let tempDir;
+  try {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "shelf-ocr-"));
+    const imagePath = path.join(tempDir, `cover.${extension}`);
+    await fs.writeFile(imagePath, image);
+    const { stdout } = await execFileAsync(getOcrCommand(), [imagePath, "stdout", "-l", "eng", "--psm", "11"], {
+      timeout: 45000,
+      maxBuffer: 1024 * 1024,
+    });
+    return res.json({ text: String(stdout || "").trim() });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return res.status(503).json({ error: "Local OCR is unavailable. Install Tesseract, then restart the app." });
+    }
+    return res.status(500).json({ error: "OCR could not read this cover image. Try a brighter, closer photo." });
+  } finally {
+    if (tempDir) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+app.post("/api/cover-matcher/matches", (req, res) => {
+  const ocrText = String(req.body?.ocrText || "").trim();
+  const unassignedOnly = req.body?.unassignedOnly !== false;
+  if (ocrText.length < 2) {
+    return res.status(400).json({ error: "There is not enough OCR text to match a cover." });
+  }
+
+  const matches = coverMatchAlbumsStmt.all()
+    .filter((album) => !unassignedOnly || !String(album.barcode || "").trim())
+    .map((album) => ({ ...album, ...scoreCoverMatch(ocrText, album) }))
+    .filter((album) => album.score > 0)
+    .sort((a, b) => b.score - a.score || String(a.artist).localeCompare(String(b.artist)))
+    .slice(0, COVER_MATCH_LIMIT);
+  return res.json({ matches });
+});
+
+app.get("/api/next-artist", (req, res) => {
+  const skipArtist = String(req.query.skipArtist || "").trim();
+
+  const artist = nextArtistStmt.get({
+      skipArtist,
+  });
+
+  if (!artist) {
+      return res.json({
+          complete: true
+      });
+  }
+
+  res.json({
+      complete: false,
+      artist: artist.artist,
+  });
+
+});
+
+app.post("/api/save-artist-sort", (req, res) => {
+
+  const artist = String(req.body.artist || "").trim();
+  const artistSort = String(req.body.artistSort || "").trim();
+
+  if (!artist || !artistSort) {
+      return res.status(400).json({
+          error: "Missing artist or artistSort."
+      });
+  }
+
+  const updated = saveArtistSort(artist, artistSort);
+
+  res.json({
+      success: true,
+      updated,
+  });
+
+});
+
+app.post("/api/undo-artist-sort", (_req, res) => {
+  const history = undoArtistSort();
+
+  if (!history) {
+    return res.json({
+      success: false,
+      message: "There is no artist sort to undo.",
+    });
+  }
+
+  return res.json({
+    success: true,
+    artist: history.artist,
+  });
+});
+
+app.get("/api/recent-artist-sorts", (req, res) => {
+  const requestedLimit = Number(req.query.limit);
+  const limit = Number.isInteger(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), ARTIST_SORT_RECENT_LIMIT)
+    : ARTIST_SORT_RECENT_LIMIT;
+
+  return res.json(recentArtistSortHistoryStmt.all(limit));
+});
+
+app.get("/api/artist-sort-progress", (_req, res) => {
+  const rows = artistSortProgressStmt.all();
+  return res.json(
+    rows.map((row) => ({
+      ...row,
+      percent: row.total > 0
+        ? Number(((row.sorted / row.total) * 100).toFixed(1))
+        : 0,
+    }))
+  );
+});
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -417,13 +795,14 @@ app.post("/assign", (req, res) => {
   const assignedAt = new Date().toISOString();
   const assignTransaction = db.transaction(() => {
     assignStmt.run({ barcode, albumId, assignedAt });
-    historyInsertStmt.run({ albumId, barcode, assignedAt });
+    return historyInsertStmt.run({ albumId, barcode, assignedAt }).lastInsertRowid;
   });
-  assignTransaction();
+  const historyId = Number(assignTransaction());
 
   return res.json({
     success: true,
     message: "Barcode assigned.",
+    historyId,
     album: {
       id: album.id,
       artist: album.artist,
@@ -432,6 +811,41 @@ app.post("/assign", (req, res) => {
       assigned_at: assignedAt,
     },
   });
+});
+
+app.post("/undo-assignment/:historyId", (req, res) => {
+  const historyId = Number(req.params.historyId);
+  if (!Number.isInteger(historyId)) {
+    return res.status(400).json({ error: "Valid assignment history id is required." });
+  }
+
+  try {
+    const undoTransaction = db.transaction(() => {
+      const history = historyByIdStmt.get(historyId);
+      if (!history) {
+        return null;
+      }
+
+      const cleared = clearAssignmentStmt.run({
+        albumId: history.album_id,
+        barcode: history.barcode,
+      });
+      if (cleared.changes === 0) {
+        throw new Error("That assignment has changed and can no longer be undone safely.");
+      }
+
+      markHistoryUndoneStmt.run({ id: history.id, undoneAt: new Date().toISOString() });
+      return history;
+    });
+
+    const history = undoTransaction();
+    if (!history) {
+      return res.status(404).json({ error: "That assignment is already undone or unavailable." });
+    }
+    return res.json({ success: true, assignment: history });
+  } catch (error) {
+    return res.status(409).json({ error: error.message });
+  }
 });
 
 app.get("/check-barcode/:barcode", (req, res) => {

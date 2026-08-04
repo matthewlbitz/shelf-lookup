@@ -27,6 +27,17 @@ Open `http://localhost:3000`.
 - Undo last assignment
 - Unassigned-only search toggle
 - Recent assignment history
+- Camera cover matching with local OCR, local album matching, and barcode confirmation
+
+## Camera Cover Matching (macOS and Windows)
+
+Open `http://localhost:3000/cover-matcher`. Chrome and Edge can use either a webcam or a chosen image file on both macOS and Windows. OCR stays on the computer running the app: install the free [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) executable, ensure `tesseract` is on PATH, and restart the app. On macOS, `brew install tesseract` is a common option. On Windows, install a Tesseract build and add its install folder to PATH. Set `TESSERACT_PATH` to the executable path if it is not on PATH.
+
+## Safe Test Database
+
+`masterAlbums.test.db` is a local copy of the current album database for testing. It is separate from `masterAlbums.db`, so assignments, skips, and sorting changes made while using it do not affect the live database.
+
+On macOS/Linux, run `DB_PATH=masterAlbums.test.db node server.js`. In PowerShell on Windows, run `$env:DB_PATH = "masterAlbums.test.db"; node server.js`.
 
 ## Database Notes
 

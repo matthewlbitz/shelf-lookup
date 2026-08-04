@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Artist Sorter</title>
+
+<style>
+:root {
+    color-scheme: dark;
+    --bg: #090909;
+    --bg-2: #141414;
+    --panel: rgba(18, 18, 18, .96);
+    --line: #7a5b00;
+    --line-soft: rgba(218, 165, 32, .28);
+    --text: #f5d77a;
+    --muted: #c8a94b;
+    --accent: #daa520;
+    --accent-strong: #f2c94c;
+    --error: #ff7a7a;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    font-family: "Courier New", Courier, monospace;
+    background:
+        radial-gradient(circle at top left, rgba(218, 165, 32, .18) 0, transparent 26%),
+        linear-gradient(135deg, #000 0%, var(--bg) 45%, var(--bg-2) 100%);
+    color: var(--text);
+}
+
+.shell {
+    max-width: 1500px;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.sorter-layout {
+    display: grid;
+    grid-template-rows: minmax(260px, 1fr) minmax(0, 2fr);
+    gap: 20px;
+    min-height: calc(100vh - 48px);
+}
+
+.panel {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(218, 165, 32, .06), transparent 22%),
+        var(--panel);
+    box-shadow:
+        0 18px 50px rgba(0, 0, 0, .45),
+        inset 0 0 0 1px rgba(218, 165, 32, .06);
+}
+
+.sorting-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 28px;
+}
+
+.panel-kicker {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+}
+
+h1,
+h2 {
+    margin: 0;
+    text-transform: uppercase;
+}
+
+h1 {
+    font-size: clamp(25px, 3vw, 38px);
+    letter-spacing: .1em;
+    text-shadow: 0 0 18px rgba(218, 165, 32, .18);
+}
+
+h2 {
+    font-size: 17px;
+    letter-spacing: .1em;
+}
+
+.sort-instruction {
+    margin: 16px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+    letter-spacing: .04em;
+}
+
+#artist {
+    display: flex;
+    flex: 1;
+    flex-wrap: wrap;
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 160px;
+    padding: 24px 0;
+    color: var(--accent-strong);
+    text-align: center;
+    text-shadow: 0 0 22px rgba(218, 165, 32, .2);
+}
+
+.word {
+    padding: 10px 14px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-size: clamp(31px, 5vw, 64px);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.word:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: rgba(218, 165, 32, .12);
+    box-shadow: 0 0 24px rgba(218, 165, 32, .12);
+}
+
+button:focus-visible {
+    outline: 3px solid rgba(218, 165, 32, .32);
+    outline-offset: 2px;
+}
+
+#actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+#actions button {
+    min-width: 132px;
+    padding: 11px 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #111;
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+#actions button:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: rgba(218, 165, 32, .12);
+}
+
+#skipButton {
+    border-color: var(--accent) !important;
+    background: linear-gradient(180deg, #f0bf42, var(--accent)) !important;
+    color: #121212 !important;
+}
+
+.word:disabled,
+#actions button:disabled {
+    cursor: wait;
+    opacity: .55;
+}
+
+#error {
+    min-height: 1.2em;
+    margin: 14px 0 0;
+    color: var(--error);
+    font-size: 14px;
+    text-align: center;
+}
+
+#summaries {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    min-height: 0;
+}
+
+.summary-panel {
+    display: flex;
+    min-height: 0;
+    padding: 22px;
+    flex-direction: column;
+}
+
+.summary-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.summary-note {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: .04em;
+}
+
+#genreProgress,
+#recentlySorted {
+    min-height: 0;
+    margin: 14px 0 0;
+    overflow: auto;
+}
+
+#recentlySorted {
+    padding: 0;
+    list-style: none;
+}
+
+#recentlySorted li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+#recentlySorted li:last-child {
+    border-bottom: 0;
+}
+
+#recentlySorted strong {
+    color: var(--text);
+}
+
+.progressRow {
+    margin: 0 0 16px;
+}
+
+.progressLabel {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 7px;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.progressLabel span:last-child {
+    color: var(--muted);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.progressTrack {
+    height: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #080808;
+}
+
+.progressFill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+    box-shadow: 0 0 12px rgba(218, 165, 32, .32);
+    transition: width .25s ease;
+}
+
+@media (max-width: 760px) {
+    .shell {
+        padding: 14px;
+    }
+
+    .sorter-layout {
+        grid-template-rows: auto auto;
+        min-height: auto;
+    }
+
+    .sorting-panel {
+        min-height: 410px;
+        padding: 22px;
+    }
+
+    #summaries {
+        grid-template-columns: 1fr;
+    }
+
+    .summary-panel {
+        min-height: 300px;
+    }
+
+    .progressLabel {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+}
+</style>
+</head>
+
+<body>
+<main class="shell">
+    <div class="sorter-layout">
+        <section class="panel sorting-panel" aria-labelledby="sorterTitle">
+            <p class="panel-kicker">Shelf organizer</p>
+            <h1 id="sorterTitle">Artist sorter</h1>
+            <p class="sort-instruction">Click the word that should determine filing order.</p>
+
+            <div id="artist" aria-label="Artist name"></div>
+
+            <div id="actions">
+                <button id="skipButton" type="button">Skip</button>
+                <button id="undoButton" type="button">Undo</button>
+            </div>
+
+            <div id="error" role="alert"></div>
+        </section>
+
+        <div id="summaries">
+            <section class="panel summary-panel" aria-labelledby="progressTitle">
+                <div class="summary-head">
+                    <h2 id="progressTitle">Genre progress</h2>
+                    <span class="summary-note">Sorted artists</span>
+                </div>
+                <div id="genreProgress"></div>
+            </section>
+
+            <section class="panel summary-panel" aria-labelledby="recentTitle">
+                <div class="summary-head">
+                    <h2 id="recentTitle">Recently sorted</h2>
+                    <span class="summary-note">Latest 15</span>
+                </div>
+                <ol id="recentlySorted"></ol>
+            </section>
+        </div>
+    </div>
+</main>
+
+<script>
+const artistDisplay = document.getElementById("artist");
+const skipButton = document.getElementById("skipButton");
+const undoButton = document.getElementById("undoButton");
+const errorDiv = document.getElementById("error");
+const recentlySorted = document.getElementById("recentlySorted");
+const genreProgress = document.getElementById("genreProgress");
+let currentArtist = "";
+
+function setError(message = "") {
+    errorDiv.textContent = message;
+}
+
+function setControlsDisabled(disabled) {
+    skipButton.disabled = disabled;
+    undoButton.disabled = disabled;
+    artistDisplay.querySelectorAll("button").forEach(button => {
+        button.disabled = disabled;
+    });
+}
+
+async function readJson(response) {
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || "The request could not be completed.");
+    }
+    return data;
+}
+
+async function saveArtistSort(artist, artistSort) {
+    setError();
+    setControlsDisabled(true);
+
+    try {
+        const response = await fetch("/api/save-artist-sort", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ artist, artistSort })
+        });
+        await readJson(response);
+        await refreshSummaries();
+        await loadArtist();
+    } catch (error) {
+        setError(error.message);
+    } finally {
+        setControlsDisabled(false);
+    }
+}
+
+function renderRecentArtistSorts(rows) {
+    recentlySorted.innerHTML = "";
+
+    if (!rows.length) {
+        const item = document.createElement("li");
+        item.textContent = "No artists sorted yet.";
+        recentlySorted.appendChild(item);
+        return;
+    }
+
+    rows.forEach(row => {
+        const item = document.createElement("li");
+        const artist = document.createElement("strong");
+        artist.textContent = row.artist;
+        item.append(artist, ` → ${row.artist_sort}`);
+        recentlySorted.appendChild(item);
+    });
+}
+
+function renderGenreProgress(rows) {
+    genreProgress.innerHTML = "";
+
+    rows.forEach(row => {
+        const progressRow = document.createElement("div");
+        progressRow.className = "progressRow";
+
+        const label = document.createElement("div");
+        label.className = "progressLabel";
+        const genre = document.createElement("span");
+        genre.textContent = row.genre;
+        const value = document.createElement("span");
+        value.textContent = `${row.sorted} / ${row.total} artists (${row.percent}%)`;
+        label.append(genre, value);
+
+        const track = document.createElement("div");
+        track.className = "progressTrack";
+        track.setAttribute("role", "progressbar");
+        track.setAttribute("aria-label", `${row.genre} sorting progress`);
+        track.setAttribute("aria-valuemin", "0");
+        track.setAttribute("aria-valuemax", String(row.total));
+        track.setAttribute("aria-valuenow", String(row.sorted));
+
+        const fill = document.createElement("div");
+        fill.className = "progressFill";
+        fill.style.width = `${row.percent}%`;
+        track.appendChild(fill);
+
+        progressRow.append(label, track);
+        genreProgress.appendChild(progressRow);
+    });
+}
+
+async function refreshSummaries() {
+    const [recentResponse, progressResponse] = await Promise.all([
+        fetch("/api/recent-artist-sorts"),
+        fetch("/api/artist-sort-progress")
+    ]);
+    const [recentRows, progressRows] = await Promise.all([
+        readJson(recentResponse),
+        readJson(progressResponse)
+    ]);
+
+    renderRecentArtistSorts(recentRows);
+    renderGenreProgress(progressRows);
+}
+
+function renderArtist(artist) {
+    currentArtist = artist;
+    artistDisplay.innerHTML = "";
+
+    artist.trim().split(/\s+/).forEach((word, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "word";
+        button.textContent = word;
+        button.title = index === 0
+            ? `File as “${artist}”`
+            : `File under “${word}”`;
+        button.addEventListener("click", () => {
+            saveArtistSort(artist, index === 0 ? artist : word);
+        });
+        artistDisplay.appendChild(button);
+    });
+}
+
+async function loadArtist(skipArtist = "") {
+    setError();
+    setControlsDisabled(true);
+    artistDisplay.textContent = "Loading…";
+
+    try {
+        const response = await fetch(
+            `/api/next-artist?skipArtist=${encodeURIComponent(skipArtist)}`
+        );
+        const data = await readJson(response);
+
+        if (data.complete) {
+            if (skipArtist) {
+                await loadArtist();
+                return;
+            }
+            currentArtist = "";
+            artistDisplay.textContent = "🎉 Everything is sorted!";
+            return;
+        }
+
+        renderArtist(data.artist);
+    } catch (error) {
+        currentArtist = "";
+        artistDisplay.textContent = "Unable to load an artist.";
+        setError(error.message);
+    } finally {
+        setControlsDisabled(false);
+    }
+}
+
+async function undoArtistSort() {
+    setError();
+    setControlsDisabled(true);
+
+    try {
+        const response = await fetch("/api/undo-artist-sort", { method: "POST" });
+        const data = await readJson(response);
+
+        if (!data.success) {
+            setError(data.message);
+            return;
+        }
+
+        renderArtist(data.artist);
+        await refreshSummaries();
+    } catch (error) {
+        setError(error.message);
+    } finally {
+        setControlsDisabled(false);
+    }
+}
+
+skipButton.addEventListener("click", () => loadArtist(currentArtist));
+undoButton.addEventListener("click", undoArtistSort);
+loadArtist();
+refreshSummaries().catch(error => setError(error.message));
+</script>
+</body>
+</html>

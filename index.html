@@ -82,6 +82,12 @@
       gap: 8px;
     }
 
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
     .tab {
       border: 1px solid var(--line);
       background: linear-gradient(180deg, rgba(218, 165, 32, 0.08), rgba(218, 165, 32, 0.02));
@@ -98,6 +104,25 @@
       background: var(--accent);
       color: #111;
       border-color: var(--accent);
+      box-shadow: 0 0 22px rgba(218, 165, 32, 0.28);
+    }
+
+    .artist-sorter-link {
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      background: linear-gradient(180deg, #f0bf42, var(--accent));
+      color: #121212;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .artist-sorter-link:hover,
+    .artist-sorter-link:focus-visible {
       box-shadow: 0 0 22px rgba(218, 165, 32, 0.28);
     }
 
@@ -596,6 +621,10 @@
         align-items: stretch;
       }
 
+      .topbar-actions {
+        justify-content: space-between;
+      }
+
       .progress-summary {
         grid-template-columns: 1fr;
       }
@@ -621,9 +650,13 @@
       <div class="main-column">
         <div class="topbar">
           <h1>Vinyl Shelf Organizer</h1>
-          <div class="tabs" role="tablist" aria-label="Modes">
-            <button class="tab active" id="assignTab" type="button" data-mode="assign">Assign</button>
-            <button class="tab" id="sortTab" type="button" data-mode="sort">Sort</button>
+          <div class="topbar-actions">
+            <div class="tabs" role="tablist" aria-label="Modes">
+              <button class="tab active" id="assignTab" type="button" data-mode="assign">Assign</button>
+              <button class="tab" id="sortTab" type="button" data-mode="sort">Sort</button>
+            </div>
+            <a class="artist-sorter-link" href="/artist-sorter">Artist Sorter</a>
+            <a class="artist-sorter-link" href="/cover-matcher">Camera Match</a>
           </div>
         </div>
 
