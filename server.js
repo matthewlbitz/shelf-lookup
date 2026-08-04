@@ -1,8 +1,4 @@
 const path = require("path");
-const fs = require("fs/promises");
-const os = require("os");
-const { execFile } = require("child_process");
-const { promisify } = require("util");
 const express = require("express");
 const Database = require("better-sqlite3");
 
@@ -11,9 +7,6 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, "masterAlbums.db");
 const SHELF_GROUP_MAX = 32;
 const HISTORY_LIMIT = 10;
 const ARTIST_SORT_RECENT_LIMIT = 15;
-const COVER_MATCH_LIMIT = 12;
-const OCR_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const execFileAsync = promisify(execFile);
 
 const db = new Database(DB_PATH);
 
@@ -194,18 +187,6 @@ const searchStmt = db.prepare(
        OR ${quotedTitleColumn} LIKE @pattern
     ORDER BY ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE
     LIMIT 20
-  `
-);
-
-const coverMatchAlbumsStmt = db.prepare(
-  `
-    SELECT
-      ${quotedIdColumn} AS id,
-      ${quotedArtistColumn} AS artist,
-      ${quotedTitleColumn} AS title,
-      ${quotedBarcodeColumn} AS barcode
-    FROM ${quotedTable}
-    ORDER BY ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE
   `
 );
 
@@ -505,125 +486,11 @@ const progressStmt = quotedCurrentShelfColumn
 
 const app = express();
 
-// Cover captures are sent as data URLs; keep the HTTP ceiling slightly above
-// the validated decoded-image limit used by the OCR endpoint.
-app.use(express.json({ limit: "14mb" }));
+app.use(express.json());
 app.use(express.static(__dirname));
 
 app.get("/artist-sorter", (req, res) => {
   res.sendFile(path.join(__dirname, "artist-sorter.html"));
-});
-
-app.get("/cover-matcher", (_req, res) => {
-  res.redirect("/batch-capture");
-});
-
-app.get("/batch-capture", (_req, res) => {
-  res.sendFile(path.join(__dirname, "batch-capture.html"));
-});
-
-function normalizeMatchText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function matchTokens(value) {
-  return [...new Set(normalizeMatchText(value).split(" ").filter((word) => word.length > 1))];
-}
-
-function scoreCoverMatch(ocrText, album) {
-  const source = normalizeMatchText(ocrText);
-  const artist = normalizeMatchText(album.artist);
-  const title = normalizeMatchText(album.title);
-  const haystack = ` ${source} `;
-  let score = 0;
-  const reasons = [];
-
-  if (artist.length > 2 && haystack.includes(` ${artist} `)) {
-    score += 60;
-    reasons.push("artist phrase");
-  }
-  if (title.length > 2 && haystack.includes(` ${title} `)) {
-    score += 55;
-    reasons.push("title phrase");
-  }
-
-  const artistHits = matchTokens(artist).filter((token) => haystack.includes(` ${token} `));
-  const titleHits = matchTokens(title).filter((token) => haystack.includes(` ${token} `));
-  score += artistHits.length * 14 + titleHits.length * 12;
-  if (artistHits.length) reasons.push(`${artistHits.length} artist word${artistHits.length === 1 ? "" : "s"}`);
-  if (titleHits.length) reasons.push(`${titleHits.length} title word${titleHits.length === 1 ? "" : "s"}`);
-
-  return { score, reasons };
-}
-
-function getOcrCommand() {
-  return process.env.TESSERACT_PATH || "tesseract";
-}
-
-app.get("/api/cover-matcher/status", async (_req, res) => {
-  try {
-    await execFileAsync(getOcrCommand(), ["--version"], { timeout: 5000 });
-    return res.json({ available: true });
-  } catch (_error) {
-    return res.json({
-      available: false,
-      message: "Local OCR needs Tesseract. Install it, then restart this app (or set TESSERACT_PATH).",
-    });
-  }
-});
-
-app.post("/api/cover-matcher/ocr", async (req, res) => {
-  const dataUrl = String(req.body?.image || "");
-  const matched = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/i);
-  if (!matched) {
-    return res.status(400).json({ error: "Capture a PNG, JPEG, or WebP cover image first." });
-  }
-
-  const image = Buffer.from(matched[2], "base64");
-  if (!image.length || image.length > OCR_MAX_IMAGE_BYTES) {
-    return res.status(400).json({ error: "Image must be between 1 byte and 10 MB." });
-  }
-
-  const extension = matched[1].toLowerCase().includes("png") ? "png" : matched[1].toLowerCase().includes("webp") ? "webp" : "jpg";
-  let tempDir;
-  try {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "shelf-ocr-"));
-    const imagePath = path.join(tempDir, `cover.${extension}`);
-    await fs.writeFile(imagePath, image);
-    const { stdout } = await execFileAsync(getOcrCommand(), [imagePath, "stdout", "-l", "eng", "--psm", "11"], {
-      timeout: 45000,
-      maxBuffer: 1024 * 1024,
-    });
-    return res.json({ text: String(stdout || "").trim() });
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return res.status(503).json({ error: "Local OCR is unavailable. Install Tesseract, then restart the app." });
-    }
-    return res.status(500).json({ error: "OCR could not read this cover image. Try a brighter, closer photo." });
-  } finally {
-    if (tempDir) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  }
-});
-
-app.post("/api/cover-matcher/matches", (req, res) => {
-  const ocrText = String(req.body?.ocrText || "").trim();
-  const unassignedOnly = req.body?.unassignedOnly !== false;
-  if (ocrText.length < 2) {
-    return res.status(400).json({ error: "There is not enough OCR text to match a cover." });
-  }
-
-  const matches = coverMatchAlbumsStmt.all()
-    .filter((album) => !unassignedOnly || !String(album.barcode || "").trim())
-    .map((album) => ({ ...album, ...scoreCoverMatch(ocrText, album) }))
-    .filter((album) => album.score > 0)
-    .sort((a, b) => b.score - a.score || String(a.artist).localeCompare(String(b.artist)))
-    .slice(0, COVER_MATCH_LIMIT);
-  return res.json({ matches });
 });
 
 app.get("/api/next-artist", (req, res) => {
