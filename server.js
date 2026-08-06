@@ -459,11 +459,11 @@ const undoArtistSort = db.transaction(() => {
   return history;
 });
 
-const shelfGroupExpr = quotedCurrentShelfColumn
-  ? `NULLIF(RTRIM(TRIM(${quotedCurrentShelfColumn}), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'), '')`
+const shelfGroupExpr = quotedNewShelfColumn
+  ? `NULLIF(RTRIM(TRIM(${quotedNewShelfColumn}), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'), '')`
   : null;
 
-const progressStmt = quotedCurrentShelfColumn
+const progressStmt = quotedNewShelfColumn
   ? db.prepare(
       `
         SELECT
@@ -476,7 +476,7 @@ const progressStmt = quotedCurrentShelfColumn
             END
           ) AS assigned
         FROM ${quotedTable}
-        WHERE TRIM(COALESCE(${quotedCurrentShelfColumn}, '')) <> ''
+        WHERE TRIM(COALESCE(${quotedNewShelfColumn}, '')) <> ''
           AND ${shelfGroupExpr} IS NOT NULL
         GROUP BY section
         ORDER BY CAST(section AS INTEGER), section
