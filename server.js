@@ -37,6 +37,22 @@ function hasColumn(columns, name) {
   return columns.some((column) => column.name === name);
 }
 
+function inferAutomaticArtistSort(artist) {
+  const normalizedArtist = String(artist || "").trim();
+
+  const leadingTheMatch = normalizedArtist.match(/^The\s+(\S+)$/);
+  if (leadingTheMatch) {
+    return leadingTheMatch[1];
+  }
+
+  const numberedArtistMatch = normalizedArtist.match(/^(\S+)\s+\(\d+\)$/);
+  if (numberedArtistMatch) {
+    return numberedArtistMatch[1];
+  }
+
+  return null;
+}
+
 function resolveAlbumTable() {
   const tables = getUserTables();
 
@@ -355,6 +371,21 @@ const saveArtistSortStmt = db.prepare(`
     WHERE ${quotedArtistColumn} = ?
 `);
 
+const blankArtistSortArtistsStmt = db.prepare(`
+    SELECT DISTINCT ${quotedArtistColumn} AS artist
+    FROM ${quotedTable}
+    WHERE (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
+      AND ${quotedArtistColumn} IS NOT NULL
+      AND TRIM(${quotedArtistColumn}) <> ''
+`);
+
+const saveAutomaticArtistSortStmt = db.prepare(`
+    UPDATE ${quotedTable}
+    SET ${quotedArtistSortColumn} = @artistSort
+    WHERE ${quotedArtistColumn} = @artist
+      AND (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
+`);
+
 const artistSortHistoryInsertStmt = db.prepare(`
     INSERT INTO artist_sort_history (
         artist,
@@ -458,6 +489,23 @@ const saveArtistSort = db.transaction((artist, artistSort) => {
   return result.changes;
 });
 
+const applyAutomaticArtistSorts = db.transaction(() => {
+  let updated = 0;
+
+  for (const { artist } of blankArtistSortArtistsStmt.all()) {
+    const artistSort = inferAutomaticArtistSort(artist);
+    if (!artistSort) {
+      continue;
+    }
+
+    updated += saveAutomaticArtistSortStmt.run({ artist, artistSort }).changes;
+  }
+
+  return updated;
+});
+
+applyAutomaticArtistSorts();
+
 const undoArtistSort = db.transaction(() => {
   const history = latestArtistSortHistoryStmt.get();
   if (!history) {
@@ -516,6 +564,9 @@ app.get("/artist-sorter", (req, res) => {
 
 app.get("/api/next-artist", (req, res) => {
   const skipArtist = String(req.query.skipArtist || "").trim();
+
+  // Apply permanent rules to newly imported rows before offering manual work.
+  applyAutomaticArtistSorts();
 
   const artist = nextArtistStmt.get({
       skipArtist,
