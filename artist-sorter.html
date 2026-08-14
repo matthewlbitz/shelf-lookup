@@ -548,6 +548,12 @@ async function loadArtist(skipArtist = "") {
             return;
         }
 
+        const words = data.artist.trim().split(/\s+/);
+        if (words.length === 1) {
+            await saveArtistSort(data.artist, words[0]);
+            return;
+        }
+
         renderArtist(data.artist);
     } catch (error) {
         currentArtist = "";
