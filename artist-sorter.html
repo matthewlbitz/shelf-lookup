@@ -107,6 +107,22 @@ h1 {
     text-shadow: 0 0 18px rgba(218, 165, 32, .18);
 }
 
+.sorter-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px 18px;
+}
+
+#sortedArtistCount {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
 h2 {
     font-size: 17px;
     letter-spacing: .1em;
@@ -332,7 +348,10 @@ button:focus-visible {
     <div class="sorter-layout">
         <section class="panel sorting-panel" aria-labelledby="sorterTitle">
             <p class="panel-kicker">Shelf organizer</p>
-            <h1 id="sorterTitle">Artist sorter</h1>
+            <div class="sorter-heading">
+                <h1 id="sorterTitle">Artist sorter</h1>
+                <span id="sortedArtistCount" aria-live="polite">Sorted: — artists</span>
+            </div>
             <a class="back-link" href="/">Back to organizer</a>
             <p class="sort-instruction">Click the word that should determine filing order.</p>
 
@@ -373,6 +392,7 @@ const undoButton = document.getElementById("undoButton");
 const errorDiv = document.getElementById("error");
 const recentlySorted = document.getElementById("recentlySorted");
 const genreProgress = document.getElementById("genreProgress");
+const sortedArtistCount = document.getElementById("sortedArtistCount");
 let currentArtist = "";
 
 function setError(message = "") {
@@ -467,18 +487,25 @@ function renderGenreProgress(rows) {
     });
 }
 
+function renderSortedArtistCount(count) {
+    sortedArtistCount.textContent = `Sorted: ${Number(count).toLocaleString()} artists`;
+}
+
 async function refreshSummaries() {
-    const [recentResponse, progressResponse] = await Promise.all([
+    const [recentResponse, progressResponse, countResponse] = await Promise.all([
         fetch("/api/recent-artist-sorts"),
-        fetch("/api/artist-sort-progress")
+        fetch("/api/artist-sort-progress"),
+        fetch("/api/sorted-artist-count")
     ]);
-    const [recentRows, progressRows] = await Promise.all([
+    const [recentRows, progressRows, count] = await Promise.all([
         readJson(recentResponse),
-        readJson(progressResponse)
+        readJson(progressResponse),
+        readJson(countResponse)
     ]);
 
     renderRecentArtistSorts(recentRows);
     renderGenreProgress(progressRows);
+    renderSortedArtistCount(count.sorted);
 }
 
 function renderArtist(artist) {

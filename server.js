@@ -423,6 +423,24 @@ const artistSortProgressStmt = db.prepare(`
     ORDER BY genre COLLATE NOCASE
 `);
 
+const sortedArtistCountStmt = db.prepare(`
+    SELECT COUNT(*) AS sorted
+    FROM (
+        SELECT ${quotedArtistColumn}
+        FROM ${quotedTable}
+        WHERE ${quotedArtistColumn} IS NOT NULL
+          AND TRIM(${quotedArtistColumn}) <> ''
+        GROUP BY ${quotedArtistColumn}
+        HAVING SUM(
+            CASE
+                WHEN ${quotedArtistSortColumn} IS NULL
+                  OR TRIM(${quotedArtistSortColumn}) = '' THEN 1
+                ELSE 0
+            END
+        ) = 0
+    )
+`);
+
 const saveArtistSort = db.transaction((artist, artistSort) => {
   const previousValues = artistSortRowsStmt.all(artist);
   const result = saveArtistSortStmt.run(artistSort, artist);
@@ -568,6 +586,10 @@ app.get("/api/artist-sort-progress", (_req, res) => {
         : 0,
     }))
   );
+});
+
+app.get("/api/sorted-artist-count", (_req, res) => {
+  return res.json(sortedArtistCountStmt.get());
 });
 
 app.get("/health", (_req, res) => {
