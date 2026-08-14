@@ -350,7 +350,7 @@ button:focus-visible {
             <p class="panel-kicker">Shelf organizer</p>
             <div class="sorter-heading">
                 <h1 id="sorterTitle">Artist sorter</h1>
-                <span id="sortedArtistCount" aria-live="polite">Sorted: — artists</span>
+                <span id="sortedArtistCount" aria-live="polite">Sorted: — / — artists</span>
             </div>
             <a class="back-link" href="/">Back to organizer</a>
             <p class="sort-instruction">Click the word that should determine filing order.</p>
@@ -487,8 +487,8 @@ function renderGenreProgress(rows) {
     });
 }
 
-function renderSortedArtistCount(count) {
-    sortedArtistCount.textContent = `Sorted: ${Number(count).toLocaleString()} artists`;
+function renderSortedArtistCount({ sorted, total }) {
+    sortedArtistCount.textContent = `Sorted: ${Number(sorted).toLocaleString()} / ${Number(total).toLocaleString()} artists`;
 }
 
 async function refreshSummaries() {
@@ -505,7 +505,7 @@ async function refreshSummaries() {
 
     renderRecentArtistSorts(recentRows);
     renderGenreProgress(progressRows);
-    renderSortedArtistCount(count.sorted);
+    renderSortedArtistCount(count);
 }
 
 function renderArtist(artist) {
