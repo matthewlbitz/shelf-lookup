@@ -135,6 +135,33 @@ h2 {
     letter-spacing: .04em;
 }
 
+.genre-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+#genreSelect {
+    min-width: 220px;
+    padding: 9px 34px 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #111;
+    color: var(--text);
+    font: inherit;
+}
+
+#genreSelect:focus-visible {
+    outline: 3px solid rgba(218, 165, 32, .32);
+    outline-offset: 2px;
+}
+
 #artist {
     display: flex;
     flex: 1;
@@ -354,6 +381,12 @@ button:focus-visible {
             </div>
             <a class="back-link" href="/">Back to organizer</a>
             <p class="sort-instruction">Click the word that should determine filing order.</p>
+            <label class="genre-filter" for="genreSelect">
+                Genre
+                <select id="genreSelect">
+                    <option value="">All genres</option>
+                </select>
+            </label>
 
             <div id="artist" aria-label="Artist name"></div>
 
@@ -393,6 +426,7 @@ const errorDiv = document.getElementById("error");
 const recentlySorted = document.getElementById("recentlySorted");
 const genreProgress = document.getElementById("genreProgress");
 const sortedArtistCount = document.getElementById("sortedArtistCount");
+const genreSelect = document.getElementById("genreSelect");
 let currentArtist = "";
 
 function setError(message = "") {
@@ -402,6 +436,7 @@ function setError(message = "") {
 function setControlsDisabled(disabled) {
     skipButton.disabled = disabled;
     undoButton.disabled = disabled;
+    genreSelect.disabled = disabled;
     artistDisplay.querySelectorAll("button").forEach(button => {
         button.disabled = disabled;
     });
@@ -487,6 +522,25 @@ function renderGenreProgress(rows) {
     });
 }
 
+function renderGenreOptions(rows) {
+    const selectedGenre = genreSelect.value;
+    genreSelect.innerHTML = "";
+
+    const allGenres = document.createElement("option");
+    allGenres.value = "";
+    allGenres.textContent = "All genres";
+    genreSelect.appendChild(allGenres);
+
+    rows.forEach(row => {
+        const option = document.createElement("option");
+        option.value = row.genre;
+        option.textContent = row.genre;
+        genreSelect.appendChild(option);
+    });
+
+    genreSelect.value = selectedGenre;
+}
+
 function renderSortedArtistCount({ sorted, total }) {
     sortedArtistCount.textContent = `Sorted: ${Number(sorted).toLocaleString()} / ${Number(total).toLocaleString()} artists`;
 }
@@ -505,6 +559,7 @@ async function refreshSummaries() {
 
     renderRecentArtistSorts(recentRows);
     renderGenreProgress(progressRows);
+    renderGenreOptions(progressRows);
     renderSortedArtistCount(count);
 }
 
@@ -533,9 +588,11 @@ async function loadArtist(skipArtist = "") {
     artistDisplay.textContent = "Loading…";
 
     try {
-        const response = await fetch(
-            `/api/next-artist?skipArtist=${encodeURIComponent(skipArtist)}`
-        );
+        const params = new URLSearchParams({ skipArtist });
+        if (genreSelect.value) {
+            params.set("genre", genreSelect.value);
+        }
+        const response = await fetch(`/api/next-artist?${params.toString()}`);
         const data = await readJson(response);
 
         if (data.complete) {
@@ -544,7 +601,9 @@ async function loadArtist(skipArtist = "") {
                 return;
             }
             currentArtist = "";
-            artistDisplay.textContent = "🎉 Everything is sorted!";
+            artistDisplay.textContent = genreSelect.value
+                ? `Everything in ${genreSelect.selectedOptions[0].textContent} is sorted.`
+                : "Everything is sorted.";
             return;
         }
 
@@ -588,8 +647,21 @@ async function undoArtistSort() {
 
 skipButton.addEventListener("click", () => loadArtist(currentArtist));
 undoButton.addEventListener("click", undoArtistSort);
-loadArtist();
-refreshSummaries().catch(error => setError(error.message));
+genreSelect.addEventListener("change", () => {
+    currentArtist = "";
+    loadArtist();
+});
+
+async function initialize() {
+    try {
+        await refreshSummaries();
+        await loadArtist();
+    } catch (error) {
+        setError(error.message);
+    }
+}
+
+initialize();
 </script>
 </body>
 </html>

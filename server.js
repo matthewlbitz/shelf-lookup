@@ -345,13 +345,16 @@ const markHistoryUndoneStmt = db.prepare(
 );
 
 const nextArtistStmt = db.prepare(`
-    SELECT
-        ${quotedArtistColumn} AS artist
+    SELECT ${quotedArtistColumn} AS artist
     FROM ${quotedTable}
     WHERE (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
       AND ${quotedArtistColumn} IS NOT NULL
       AND TRIM(${quotedArtistColumn}) <> ''
       AND (@skipArtist = '' OR ${quotedArtistColumn} <> @skipArtist)
+      AND (
+        @genre = ''
+        OR COALESCE(NULLIF(TRIM(primary_genre), ''), '(No genre)') = @genre
+      )
     GROUP BY ${quotedArtistColumn}
     ORDER BY RANDOM()
     LIMIT 1
@@ -564,13 +567,12 @@ app.get("/artist-sorter", (req, res) => {
 
 app.get("/api/next-artist", (req, res) => {
   const skipArtist = String(req.query.skipArtist || "").trim();
+  const genre = String(req.query.genre || "").trim();
 
   // Apply permanent rules to newly imported rows before offering manual work.
   applyAutomaticArtistSorts();
 
-  const artist = nextArtistStmt.get({
-      skipArtist,
-  });
+  const artist = nextArtistStmt.get({ skipArtist, genre });
 
   if (!artist) {
       return res.json({
