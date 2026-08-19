@@ -1,14 +1,16 @@
 {
   "name": "shelf-lookup",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
+  "description": "Database-backed barcode, shelf, and artist-sorting workflow for KTRU's physical music collection.",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "check": "node --check server.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["ktru", "music-library", "catalog", "sqlite", "express"],
+  "author": "Matthew Bitz",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",

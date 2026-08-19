@@ -2,7 +2,7 @@ const path = require("path");
 const express = require("express");
 const Database = require("better-sqlite3");
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "masterAlbums.db");
 const SHELF_GROUP_MAX = 32;
 const HISTORY_LIMIT = 10;

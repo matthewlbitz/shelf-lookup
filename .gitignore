@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+.env
+*.log
+*.docx
+*.before-*.db
+masterAlbums.test.db
+masterAlbums-*.db
+__pycache__/

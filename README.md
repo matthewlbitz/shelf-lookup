@@ -1,61 +1,134 @@
-# Vinyl Shelf Organizer
+# KTRU Shelf Lookup
 
-Small local web app for assigning barcode labels to vinyl albums and then looking up destination shelf locations during sorting.
+KTRU Shelf Lookup is a local web application for organizing and navigating KTRU Rice Radio's physical music collection. It connects album records, barcode labels, artist-sorting rules, and shelf assignments in one workflow designed for hands-on catalog work.
 
-## Stack
+The current development database contains more than 19,000 album records. The application supports barcode assignment and lookup, collection-progress tracking, and normalization of artist names for consistent physical sorting.
 
-- Node.js
-- Express
-- better-sqlite3
-- SQLite
-- Single-page HTML/CSS/JS frontend
+## Highlights
 
-## Run
+- Search albums by artist or title
+- Assign unique barcode labels to catalog records
+- Look up an album's destination shelf by scanning or entering its barcode
+- Filter searches to records that still need assignments
+- Review recent barcode activity and undo individual or latest assignments
+- Track assignment progress by shelf group
+- Normalize artist names through an interactive artist sorter
+- Filter artist-sorting work by genre
+- Automatically handle supported one-word and numbered artist-name patterns
+- Review artist-sorting progress and undo recent changes
+- Use a separate SQLite database through the `DB_PATH` environment variable
+
+## Why I Built It
+
+KTRU's physical music library requires more than a searchable catalog: every album must be labeled consistently, assigned to the correct shelf, and sortable according to a shared artist-name convention. Manual work at this scale is vulnerable to duplicate barcodes, inconsistent naming, and lost progress.
+
+Shelf Lookup turns that operational process into a focused web workflow. It validates assignments, records reversible history, summarizes progress, and helps staff move efficiently between catalog data and the physical collection.
+
+## Technology
+
+- **Runtime:** Node.js
+- **Server:** Express
+- **Database:** SQLite with `better-sqlite3`
+- **Frontend:** HTML, CSS, and browser JavaScript
+- **API style:** JSON endpoints used by the browser interface
+- **Version control:** Git and GitHub
+
+## Project Structure
+
+```text
+shelf-lookup/
+|-- server.js          # Express server, SQLite queries, and API routes
+|-- index.html         # Barcode assignment, lookup, history, and progress UI
+|-- artist-sorter.html # Artist-name normalization and progress workflow
+|-- package.json       # Project metadata, scripts, and dependencies
+|-- masterAlbums.db    # Development catalog database
+`-- merge/
+    `-- merge.py       # Supporting database merge utility
+```
+
+## Run Locally
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/matthewlbitz/shelf-lookup.git
+cd shelf-lookup
+```
+
+### 2. Install dependencies
 
 ```bash
 npm install
-node server.js
 ```
 
-Open `http://localhost:3000`.
+### 3. Start the application
 
-## Main Features
+```bash
+npm start
+```
 
-- Assign mode for barcode-to-album matching
-- Sort mode for fast barcode lookup
-- Shelf-group assignment progress dashboard
-- Undo last assignment
-- Unassigned-only search toggle
-- Recent assignment history
+Open [http://localhost:3000](http://localhost:3000).
 
-## Safe Test Database
+The artist-sorting interface is available at [http://localhost:3000/artist-sorter](http://localhost:3000/artist-sorter).
 
-`masterAlbums.test.db` is a local copy of the current album database for testing. It is separate from `masterAlbums.db`, so assignments, skips, and sorting changes made while using it do not affect the live database.
+## Use a Separate Database
 
-On macOS/Linux, run `DB_PATH=masterAlbums.test.db node server.js`. In PowerShell on Windows, run `$env:DB_PATH = "masterAlbums.test.db"; node server.js`.
+The application uses `masterAlbums.db` in the project folder by default. To protect the primary database while testing, point the application to a copy.
 
-## Database Notes
+On macOS or Linux:
 
-The app expects a SQLite database file named `masterAlbums.db` in the project folder by default.
+```bash
+DB_PATH=masterAlbums.test.db npm start
+```
 
-The current album table in this project is `AllAlbumShelfs`.
+On Windows PowerShell:
 
-The app will add these fields/tables automatically if missing:
+```powershell
+$env:DB_PATH="masterAlbums.test.db"
+npm start
+```
 
-- `barcode`
-- `assigned_at`
-- `assignment_history`
+The server inspects the database schema at startup and supports the project's `rainbow_albums` table as well as compatible album tables containing artist, title, and identifier fields.
 
-## Sharing Across Computers
+## Data and Workflow
 
-This repository is set up to ignore local SQLite database files and `node_modules/`.
+The application maintains operational fields and history records for:
 
-Recommended flow:
+- Unique album barcodes
+- Barcode assignment timestamps
+- Reversible assignment history
+- Normalized artist-sort values
+- Reversible artist-sort history
+- Current and destination shelf information
 
-1. Push the code to GitHub or another Git remote.
-2. On the other computer, clone the repo.
-3. Run `npm install`.
-4. Copy your real `masterAlbums.db` into the project folder.
-5. Start the app with `node server.js`.
+Where required, the server creates missing workflow columns, history tables, and indexes when it starts. Because startup can modify the selected database schema, use a backup or test copy when evaluating changes.
 
-If you want to sync the live database too, do that separately from git.
+## API Overview
+
+The Express server provides endpoints for:
+
+- Album search and barcode validation
+- Barcode assignment, lookup, and undo actions
+- Recent assignment history and shelf progress
+- Artist-sort selection, saving, progress, recent history, and undo actions
+- Application health checks
+
+## What This Project Demonstrates
+
+- Translating a physical collection-management process into a web application
+- Designing database-backed workflows with validation and reversible history
+- Building focused user interfaces for repetitive operational work
+- Querying and updating SQLite safely with prepared statements and transactions
+- Handling multiple compatible database schemas
+- Improving data quality through artist-name normalization and progress tracking
+- Iterating on real user needs with Git and GitHub
+
+## Current Status
+
+This is an actively developed operational tool. Current work focuses on expanding artist-name normalization, improving collection progress visibility, refining edge-case handling, and supporting safe database-backed workflows.
+
+## Author
+
+**Matthew Bitz**<br>
+Computer Science, Rice University<br>
+[GitHub](https://github.com/matthewlbitz)
