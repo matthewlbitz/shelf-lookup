@@ -27,28 +27,54 @@
     body {
       margin: 0;
       font-family: "Courier New", Courier, monospace;
-      background:
-        radial-gradient(circle at top left, rgba(218, 165, 32, 0.18) 0, transparent 26%),
-        linear-gradient(135deg, #000 0%, var(--bg) 45%, var(--bg-2) 100%);
+      background: #000;
       color: var(--text);
     }
 
     .shell {
-      max-width: 1880px;
+      max-width: 1720px;
       margin: 0;
       padding: 24px 24px 24px 18px;
     }
 
     .app-layout {
       display: grid;
-      grid-template-columns: minmax(760px, 1.2fr) minmax(420px, 0.8fr) minmax(300px, 0.7fr);
+      grid-template-columns: minmax(0, 1fr) 530px;
       gap: 20px;
       align-items: start;
     }
 
+    .dashboard-section { display: block; }
+    .dashboard-section > summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .dashboard-section > summary:focus-visible {
+      outline: 3px solid rgba(218, 165, 32, 0.2);
+      outline-offset: 6px;
+      border-radius: 4px;
+    }
+    .dashboard-section[open] > summary { margin-bottom: 16px; }
+    .dashboard-section:not([open]) { min-height: 0; }
+
     .main-column {
       min-width: 0;
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: 1 / span 2;
     }
+
+    .main-column > .topbar {
+      grid-row: 1;
+      margin-bottom: 0;
+    }
+
+    .main-column > .panel { grid-row: 2; }
+    .app-layout > .dashboard-group { grid-column: 2; grid-row: 2; }
 
     .side-column {
       min-width: 0;
@@ -148,6 +174,21 @@
       grid-template-columns: 280px minmax(0, 1fr);
       gap: 16px;
     }
+
+    [hidden] { display: none !important; }
+
+    #phaseStatus { margin: 0 0 14px; }
+    .no-match-notice {
+      margin-bottom: 14px;
+      padding: 16px;
+      border: 1px solid var(--accent);
+      border-left: 4px solid var(--accent);
+      border-radius: 12px;
+      background: rgba(218, 165, 32, 0.10);
+      color: var(--accent-strong);
+    }
+    .no-match-notice strong { display: block; font-size: 20px; margin-bottom: 6px; }
+    .no-match-notice span { color: var(--text); font-size: 14px; }
 
     .field {
       margin-bottom: 14px;
@@ -605,9 +646,149 @@
       min-height: 100%;
     }
 
+    .daily-total { color: var(--accent-strong); font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .daily-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .daily-level { margin-top: 18px; }
+    .daily-level-label { display: flex; justify-content: space-between; margin-bottom: 7px; font-size: 12px; color: var(--text); }
+    .daily-bar { display: flex; width: 100%; height: 24px; border: 1px solid var(--line); background: #000; }
+    .daily-segment { flex: 1; min-width: 0; }
+    .daily-segment + .daily-segment { border-left: 1px solid var(--line); }
+    .daily-segment.filled { background: var(--accent); }
+
+    .dashboard-group {
+      gap: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    .dashboard-group > .dashboard-section {
+      margin: 0;
+      padding: 18px;
+      min-height: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .dashboard-group > .dashboard-section + .dashboard-section {
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .dashboard-group {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      align-items: start;
+    }
+    .section-nav { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+    .section-tab.secondary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 14px 10px;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.5;
+      background: transparent;
+    }
+    .section-tab.secondary.selected { background: rgba(218,165,32,.14); color: var(--accent-strong); }
+    .section-tab::after {
+      content: "";
+      flex: 0 0 auto;
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--accent-strong);
+    }
+    .section-tab.secondary:hover { background: rgba(218,165,32,.08); }
+    .section-tab.secondary.selected { box-shadow: inset 0 0 0 1px var(--accent); }
+    .side-content {
+      color-scheme: dark;
+      scrollbar-width: thin;
+      scrollbar-color: var(--accent) #090909;
+    }
+    .side-content::-webkit-scrollbar { width: 10px; height: 10px; }
+    .side-content::-webkit-scrollbar-track { background: #090909; }
+    .side-content::-webkit-scrollbar-thumb {
+      background: var(--accent);
+      border: 2px solid #090909;
+      border-radius: 8px;
+    }
+    .side-content::-webkit-scrollbar-thumb:hover { background: var(--accent-strong); }
+    .side-content::-webkit-scrollbar-corner { background: #090909; }
+    .section-content { min-width: 0; border-left: 1px solid var(--line-soft); }
+    .side-content { padding: 16px; max-height: 70vh; overflow-y: auto; }
+    .side-content .progress-summary,
+    .side-content .progress-highlights,
+    .side-content .progress-list { grid-template-columns: 1fr; }
+    @media (max-width: 760px) {
+      .sidebar-browser { grid-template-columns: 135px minmax(0, 1fr); }
+      .section-tab.secondary { font-size: 11px; padding: 14px 10px; }
+      .side-content { padding: 12px; }
+    }
+
+    .app-layout > .dashboard-group {
+      align-self: stretch;
+      contain: size;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+      align-items: stretch;
+    }
+    .sidebar-browser {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+    }
+    .sidebar-browser {
+      grid-template-rows: minmax(0, 1fr);
+      contain: paint;
+    }
+    .sidebar-browser .section-content {
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+    }
+    .sidebar-browser .side-content {
+      min-height: 0;
+      height: auto;
+      max-height: none;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .sidebar-browser .section-nav {
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--accent) #090909;
+      color-scheme: dark;
+    }
+    .pinned-daily {
+      padding: 6px 18px 18px;
+      border-top: 1px solid var(--line);
+      background: #121212;
+      position: relative;
+      isolation: isolate;
+    }
+    .pinned-daily .daily-level { margin-top: 12px; }
+    @media (min-width: 1181px) {
+      .main-column > .panel { min-height: 600px; }
+    }
+
     @media (max-width: 1180px) {
       .app-layout {
         grid-template-columns: 1fr;
+      }
+      .app-layout > .dashboard-group {
+        grid-column: 1; grid-row: 3;
+        contain: none;
+        height: 600px;
       }
     }
 
@@ -645,7 +826,7 @@
   </style>
 </head>
 <body>
-  <div class="shell">
+  <div class="shell" id="workspaceShell">
     <div class="app-layout">
       <div class="main-column">
         <div class="topbar">
@@ -663,10 +844,29 @@
           <div class="grid">
             <div>
               <div class="field">
-                <label for="barcodeInput">Scanned barcode</label>
+                <label for="barcodeInput">Internal KTRU barcode</label>
                 <input id="barcodeInput" autocomplete="off" inputmode="numeric" placeholder="Scan barcode and press Enter" />
               </div>
 
+              <label class="inline-toggle" for="externalToggle">
+                <input id="externalToggle" type="checkbox" aria-controls="externalFields" />
+                <span>Use external barcodes</span>
+              </label>
+              <div id="externalFields" hidden>
+                <div class="field" id="externalScanField">
+                  <label for="externalInput">External UPC / EAN</label>
+                  <input id="externalInput" autocomplete="off" inputmode="numeric" placeholder="Scan external barcode" disabled />
+                  <div class="assign-actions">
+                    <button id="skipExternal" class="secondary" type="button" disabled>Skip barcode</button>
+                  </div>
+                </div>
+                <div id="phaseStatus" class="hint" role="status"></div>
+              </div>
+
+              <div id="noMatchNotice" class="no-match-notice" role="status" hidden>
+                <strong>NO MATCH FOUND</strong>
+                <span>Search by artist or title below to find this album.</span>
+              </div>
               <div class="field">
                 <label for="searchInput">Search artist or title</label>
                 <input id="searchInput" autocomplete="off" placeholder="Type search, then arrow keys + Enter" />
@@ -679,12 +879,13 @@
 
               <div class="assign-actions">
                 <button id="assignButton" type="button" disabled>Assign Album</button>
+                <button id="rejectMatch" class="secondary" type="button" hidden>No (N)</button>
                 <button id="clearButton" class="secondary" type="button">Clear</button>
                 <button id="undoButton" class="secondary" type="button">Undo Last</button>
               </div>
 
               <div id="assignStatus" class="status"></div>
-              <div class="hint">Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.</div>
+              <div id="manualHint" class="hint">Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.</div>
               <div class="field">
                 <label>Barcode Queue</label>
                 
@@ -730,15 +931,30 @@
 
       </div>
 
-      <aside class="side-column">
-        <section class="panel progress-panel">
-          <div class="progress-head">
-            <div>
-              <h2 class="progress-title">Shelf Progress</h2>
-              <div class="progress-subtitle">Scanned and assigned by destination shelf group</div>
+      <aside class="dashboard-group" id="activityDashboard" aria-label="Library activity and progress">
+        <div class="sidebar-browser"><div class="section-nav"><button type="button" class="secondary section-tab" id="sectionHistoryTab" aria-controls="sectionHistory" aria-expanded="false">Recent Assignments</button>
+<button type="button" class="secondary section-tab" id="sectionSessionTab" aria-controls="sectionSession" aria-expanded="false">Session Activity</button>
+<button type="button" class="secondary section-tab" id="sectionShelfProgressTab" aria-controls="sectionShelfProgress" aria-expanded="false">Shelf Progress</button>
+<button type="button" class="secondary section-tab" id="sectionBacklogTab" aria-controls="sectionBacklog" aria-expanded="false">Top Incomplete Shelves</button>
+<button type="button" class="secondary section-tab" id="sectionCoverageTab" aria-controls="sectionCoverage" aria-expanded="false">Coverage By Range</button></div>
+        <div class="section-content"><section id="sectionHistory" class="side-content" aria-labelledby="sectionHistoryTab" hidden>
+          <div class="mini-list" id="recentAssignments"></div>
+        </section>
+<section id="sectionSession" class="side-content" aria-labelledby="sectionSessionTab" hidden>
+          <div class="progress-summary">
+            <div class="stat-card">
+              <div class="stat-label">This Session</div>
+              <div class="stat-value" id="sessionAssigned">0</div>
+              <div class="stat-note" id="sessionAssignedNote">Assignments since page load</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Current Barcode</div>
+              <div class="stat-value" id="sessionBarcode">--</div>
+              <div class="stat-note" id="sessionBarcodeNote">Waiting for next scan</div>
             </div>
           </div>
-
+        </section>
+<section id="sectionShelfProgress" class="side-content" aria-labelledby="sectionShelfProgressTab" hidden>
           <div class="progress-summary">
             <div class="stat-card">
               <div class="stat-label">Assigned</div>
@@ -778,38 +994,15 @@
           <div class="status" id="progressStatus"></div>
           <div class="progress-list" id="progressList"></div>
         </section>
-      </aside>
-
-      <aside class="dashboard-column">
-        <section class="panel active dashboard-card">
-          <h3 class="dashboard-title">Session Activity</h3>
-          <div class="progress-summary">
-            <div class="stat-card">
-              <div class="stat-label">This Session</div>
-              <div class="stat-value" id="sessionAssigned">0</div>
-              <div class="stat-note" id="sessionAssignedNote">Assignments since page load</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Current Barcode</div>
-              <div class="stat-value" id="sessionBarcode">--</div>
-              <div class="stat-note" id="sessionBarcodeNote">Waiting for next scan</div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel active dashboard-card">
-          <h3 class="dashboard-title">Top Incomplete Shelves</h3>
+<section id="sectionBacklog" class="side-content" aria-labelledby="sectionBacklogTab" hidden>
           <div class="mini-list" id="backlogList"></div>
         </section>
-
-        <section class="panel active dashboard-card">
-          <h3 class="dashboard-title">Coverage By Range</h3>
+<section id="sectionCoverage" class="side-content" aria-labelledby="sectionCoverageTab" hidden>
           <div class="range-grid" id="rangeGrid"></div>
-        </section>
-
-        <section class="panel active dashboard-card">
-          <h3 class="dashboard-title">Recent Assignments</h3>
-          <div class="mini-list" id="recentAssignments"></div>
+        </section></div>
+        </div>
+        <section id="sectionDailyGoal" class="pinned-daily" aria-label="Daily goal">
+          <div id="dailyBars"></div>
         </section>
       </aside>
     </div>
@@ -824,8 +1017,28 @@
       progress: [],
       recentAssignments: [],
       sessionAssigned: 0,
-      unassignedOnly: true
+      unassignedOnly: true,
+      phase: "manual", pairs: {}, externalIndex: 0, externalPending: [], awaitingDecision: false, busy: false, searchVersion: 0, proposal: false
     };
+
+    const sidebarSections = ['sectionHistory', 'sectionSession', 'sectionShelfProgress', 'sectionBacklog', 'sectionCoverage'];
+    let activeSidebar = null;
+    function renderSidebar() {
+      for (const id of sidebarSections) {
+        const selected = id === activeSidebar;
+        document.getElementById(id).hidden = !selected;
+        document.getElementById(id).open = selected;
+        document.getElementById(`${id}Tab`).ariaExpanded = String(selected);
+        document.getElementById(`${id}Tab`).classList.toggle("selected", selected);
+      }
+    }
+    for (const id of sidebarSections) {
+      document.getElementById(`${id}Tab`).addEventListener("click", () => {
+        activeSidebar = activeSidebar === id ? null : id;
+        renderSidebar();
+      });
+    }
+    renderSidebar();
 
     const assignTab = document.getElementById("assignTab");
     const sortTab = document.getElementById("sortTab");
@@ -960,7 +1173,7 @@
         row.className = "queue-item";
 
         row.innerHTML = `
-          <strong>${index === 0 ? "▶ NEXT" : "&nbsp;&nbsp;&nbsp;"}</strong>
+          <strong>${index === (state.phase === "external" ? state.externalIndex : 0) ? "▶ NEXT" : "&nbsp;&nbsp;&nbsp;"}</strong>
           <span class="meta">${escapeHtml(barcode)}</span>
         `;
 
@@ -1075,8 +1288,8 @@
         button.type = "button";
         button.className = `result-item ${index === state.selectedIndex ? "active" : ""}`.trim();
         button.innerHTML = `
-          <strong>${escapeHtml(album.artist || "Unknown artist")}</strong>
-          <span class="meta">${escapeHtml(album.title || "Untitled")} | ID ${album.id}</span>
+          <strong>${escapeHtml(state.awaitingDecision ? (album.title || "Untitled") : (album.artist || "Unknown artist"))}</strong>
+          <span class="meta">${escapeHtml(state.awaitingDecision ? (album.artist || "Unknown artist") : (album.title || "Untitled"))} | ID ${album.id}</span>
           <span class="meta">New shelf: ${escapeHtml(album.new_shelf || "--")} | Current barcode: ${escapeHtml(album.barcode || "none")}</span>
         `;
         button.addEventListener("click", () => {
@@ -1093,7 +1306,7 @@
     function updateAssignButton() {
       const selectedAlbum = state.results[state.selectedIndex];
       assignButton.disabled =
-        state.barcodeQueue.length === 0 || !selectedAlbum;
+        state.busy || state.phase === "external" || state.barcodeQueue.length === 0 || !selectedAlbum;
     }
 
     function renderProgress() {
@@ -1170,7 +1383,38 @@
       });
     }
 
+    function dailyLevels(assigned) {
+      const count = Math.max(0, Math.floor(Number(assigned) || 0));
+      return [
+        { label: "Daily goal · 1,500", filled: Math.min(5, Math.floor(count / 300)), total: 5, unit: 300 },
+        { label: "Current 300", filled: Math.floor((count % 300) / 30), total: 10, unit: 30 },
+        { label: "Current 30", filled: Math.floor((count % 30) / 10), total: 3, unit: 10 },
+        { label: "Current 10", filled: count % 10, total: 10, unit: 1 }
+      ];
+    }
+    let dailyRequest = 0;
+    async function loadDailyProgress() {
+      const version = ++dailyRequest;
+      try {
+        const data = await fetchJson("/daily-progress");
+        if (version !== dailyRequest) return;
+        if (!Number.isFinite(data.assigned)) throw Error("Invalid daily count");
+        document.getElementById("dailyBars").innerHTML = dailyLevels(data.assigned).map(level => `
+          <div class="daily-level">
+            <div class="daily-level-label"><span>${level.label}</span><span>${level.filled * level.unit} / ${level.total * level.unit}</span></div>
+            <div class="daily-bar" role="progressbar" aria-label="${level.label}" aria-valuemin="0" aria-valuemax="${level.total * level.unit}" aria-valuenow="${level.filled * level.unit}">
+              ${Array.from({length: level.total}, (_, i) => `<span class="daily-segment ${i < level.filled ? "filled" : ""}"></span>`).join("")}
+            </div>
+          </div>`).join("");
+      } catch {
+        if (version !== dailyRequest) return;
+        document.getElementById("dailyBars").textContent = "Daily progress unavailable. Refresh to retry.";
+      }
+    }
+    window.addEventListener("focus", loadDailyProgress);
+
     async function loadProgress() {
+      loadDailyProgress();
       try {
         const data = await fetchJson("/progress");
         state.progress = Array.isArray(data)
@@ -1189,7 +1433,9 @@
     }
 
     async function searchAlbums(query) {
+      const version = ++state.searchVersion;
       const trimmed = query.trim();
+      if (state.phase === "external" || state.busy) return;
 
       if (!trimmed) {
         state.results = [];
@@ -1209,6 +1455,7 @@
           unassigned: state.unassignedOnly ? "1" : "0"
         });
         const albums = await fetchJson(`/search?${params.toString()}`);
+        if (version !== state.searchVersion) return;
         state.results = Array.isArray(albums) ? albums : [];
         state.selectedIndex = state.results.length > 0 ? 0 : -1;
         renderResults();
@@ -1219,6 +1466,7 @@
           setAssignStatus(`${state.results.length} result(s).`, "");
         }
       } catch (error) {
+        if (version !== state.searchVersion) return;
         state.results = [];
         state.selectedIndex = -1;
         renderResults();
@@ -1227,6 +1475,7 @@
     }
 
     async function assignSelectedAlbum() {
+      if (state.busy || state.phase === "external") return;
       const album = state.results[state.selectedIndex];
       const barcode = state.barcodeQueue[0];
 
@@ -1241,6 +1490,9 @@
         return;
       }
 
+      state.busy = true;
+      invalidateResults(false);
+      syncFlow();
       try {
         const data = await fetchJson("/assign", {
           method: "POST",
@@ -1276,6 +1528,7 @@
         searchInput.value = "";
         searchInput.focus();
         searchInput.select();
+        if (state.phase === "verify") showVerification();
       } catch (error) {
         if (error.data?.existingBarcode) {
           setAssignStatus(`Album already has barcode ${error.data.existingBarcode}.`, "warning");
@@ -1287,15 +1540,19 @@
         } else {
           setAssignStatus(error.message || "Assignment failed.", "error");
         }
-        barcodeInput.focus();
-      }
+        searchInput.focus();
+      } finally { state.busy = false; syncFlow(); if (state.awaitingDecision) { if (state.proposal) assignButton.focus(); else rejectMatch.focus(); } else searchInput.focus(); }
     }
 
     async function undoLastAssignment() {
+      if (state.busy || state.phase === "external") return;
+      state.busy = true; syncFlow();
       try {
         const data = await fetchJson("/undo-last-assignment", { method: "POST" });
 
         setAssignStatus(`Undid barcode ${data.assignment.barcode} from ${data.assignment.artist} - ${data.assignment.title}.`, "warning");
+
+        invalidateResults();
         barcodeInput.value = "";
         renderBarcodeQueue();
         updateSessionWidgets();
@@ -1311,10 +1568,12 @@
         barcodeInput.focus();
       } catch (error) {
         setAssignStatus(error.message || "Undo failed.", "error");
-      }
+      } finally { state.busy = false; syncFlow(); }
     }
 
     function resetAssignPanel() {
+      if (state.busy || state.phase !== "manual") return;
+      invalidateResults();
       state.barcodeQueue = [];
       state.results = [];
       state.selectedIndex = -1;
@@ -1401,82 +1660,135 @@
       return data;
     }
 
+    const externalInput = document.getElementById("externalInput");
+    const externalToggle = document.getElementById("externalToggle");
+    const skipExternal = document.getElementById("skipExternal");
+    const rejectMatch = document.getElementById("rejectMatch");
+    function invalidateResults(clear = true) {
+      ++state.searchVersion;
+      clearTimeout(state.searchTimer);
+      if (clear) { state.results = []; state.selectedIndex = -1; renderResults(); }
+    }
+    function syncFlow() {
+      const external = state.phase === "external";
+      const current = state.barcodeQueue[external ? state.externalIndex : 0];
+      document.getElementById("phaseStatus").textContent = external
+        ? `EXTERNAL PASS ${state.externalIndex + 1}/${state.barcodeQueue.length} — internal ${current}. Last scanned → first scanned. Scan or skip, then move this album.`
+        : state.phase === "verify"
+          ? `VERIFY — internal ${current}. First scanned → last scanned. Check album, then Yes or No.`
+          : `Scan the internal stack first, then scan external barcodes starting with ${current || "the last internal barcode"}. Matches are verified after all external scans.`;
+      barcodeInput.disabled = state.busy || state.phase !== "manual";
+      const readyToScan = externalToggle.checked && state.phase === "manual" && state.barcodeQueue.length > 0;
+      externalInput.disabled = state.busy || !(external || readyToScan);
+      skipExternal.disabled = externalInput.disabled;
+      externalToggle.disabled = state.busy || state.phase !== "manual";
+      document.getElementById("externalFields").hidden = !externalToggle.checked;
+      document.getElementById("externalScanField").hidden = state.phase === "verify";
+      document.getElementById("manualHint").hidden = externalToggle.checked;
+      if (state.phase !== "verify") document.getElementById("noMatchNotice").hidden = true;
+      searchInput.disabled = state.busy || external;
+      searchInput.parentElement.hidden = state.awaitingDecision || external;
+      unassignedOnlyToggle.parentElement.hidden = state.awaitingDecision || external;
+      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual");
+      undoButton.disabled = state.busy || external;
+      rejectMatch.hidden = !state.awaitingDecision;
+      rejectMatch.disabled = state.busy;
+      assignButton.textContent = state.awaitingDecision ? "Yes (Enter)" : "Assign Album";
+      renderBarcodeQueue(); updateSessionWidgets(); updateAssignButton();
+      if (external) sessionBarcodeEl.textContent = current;
+    }
+    function showVerification() {
+      document.getElementById("noMatchNotice").hidden = true;
+      invalidateResults(); state.proposal = false; state.awaitingDecision = false; searchInput.value = "";
+      if (!state.barcodeQueue.length) { state.phase = "manual"; syncFlow(); barcodeInput.focus(); return; }
+      state.awaitingDecision = true;
+      const pair = state.pairs[state.barcodeQueue[0]];
+      if (pair?.albums?.length === 1 && !pair.albums[0].barcode) {
+        state.results = pair.albums; state.selectedIndex = 0; state.proposal = true; renderResults();
+      } else {
+        state.awaitingDecision = false;
+        document.getElementById("noMatchNotice").hidden = false;
+        document.getElementById("noMatchNotice").innerHTML = pair?.unavailable
+          ? '<strong>LOOKUP UNAVAILABLE</strong><span>Search by artist or title below.</span>'
+          : '<strong>NO MATCH FOUND</strong><span>Search by artist or title below.</span>';
+        setAssignStatus(pair?.error || "Manual search ready for this album.", "warning");
+        if (pair?.suggestions?.length) {
+          state.results = pair.suggestions.filter(a => !state.unassignedOnly || !a.barcode);
+          state.selectedIndex = state.results.length ? 0 : -1; renderResults();
+        }
+        searchInput.value = pair?.query || "";
+      }
+      syncFlow();
+      if (state.proposal) assignButton.focus(); else searchInput.focus();
+    }
+    externalToggle.addEventListener("change", () => {
+      syncFlow();
+      if (externalToggle.checked && state.barcodeQueue.length) externalInput.focus();
+      else barcodeInput.focus();
+    });
+    async function pairExternal(skip = false) {
+      if (state.busy || !externalToggle.checked || state.phase === "verify" || !state.barcodeQueue.length) return;
+      const code = externalInput.value.trim();
+      if (!skip && !code) return;
+      if (state.phase === "manual") {
+        invalidateResults(); state.phase = "external"; state.pairs = {}; state.externalIndex = 0; state.externalPending = [];
+      }
+      if (state.externalIndex >= state.barcodeQueue.length) return;
+      if (!skip && !/^(\d{8}|\d{12,14})$/.test(code.replace(/[\s-]/g, ""))) {
+        setAssignStatus("Use an 8, 12, 13 or 14 digit UPC/EAN code, or Skip.", "warning"); return;
+      }
+      const internal = state.barcodeQueue[state.externalIndex];
+      state.externalIndex++; externalInput.value = "";
+      const lookup = (skip ? Promise.resolve({ albums: [], skipped: true }) : fetchJson(`/external-lookup/${encodeURIComponent(code)}`))
+        .then(pair => { state.pairs[internal] = pair; })
+        .catch(error => { state.pairs[internal] = { albums: [], unavailable: true, error: error.message }; });
+      state.externalPending.push(lookup);
+      if (state.externalIndex === state.barcodeQueue.length) {
+        state.busy = true; syncFlow();
+        document.getElementById("phaseStatus").textContent = "All scans captured. Waiting for queued online lookups…";
+        await Promise.all(state.externalPending);
+        state.busy = false;
+        state.barcodeQueue.reverse(); state.phase = "verify";
+        showVerification();
+      } else { syncFlow(); externalInput.focus(); }
+      await lookup;
+    }
+    externalInput.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.repeat) { e.preventDefault(); pairExternal(); }
+    });
+    skipExternal.addEventListener("click", () => pairExternal(true));
+    rejectMatch.addEventListener("click", () => {
+      if (state.busy) return;
+      state.proposal = false; state.awaitingDecision = false; invalidateResults(); syncFlow(); searchInput.focus();
+    });
+    window.addEventListener("keydown", e => {
+      if (state.mode === "assign" && state.awaitingDecision && !state.busy && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); rejectMatch.click(); }
+
+    });
+
     assignTab.addEventListener("click", () => setMode("assign"));
     sortTab.addEventListener("click", () => setMode("sort"));
 
     barcodeInput.addEventListener("keydown", async (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-
+      if (event.key !== "Enter" || event.repeat || state.busy || state.phase !== "manual") return;
+      event.preventDefault();
       const barcode = barcodeInput.value.trim();
-
-      if (!barcode) {
-        setAssignStatus("Scan a barcode first.", "warning");
-        return;
-      }
-
-      if (state.barcodeQueue.includes(barcode)) {
-        setAssignStatus(`Barcode ${barcode} is already in the queue.`, "warning");
-        barcodeInput.value = "";
-        barcodeInput.focus();
-        return;
-      }
-
+      if (!barcode) return;
+      state.busy = true; invalidateResults(); syncFlow();
       try {
+        if (state.barcodeQueue.includes(barcode)) throw Error("Barcode already queued.");
         const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
-
-        if (data.assigned) {
-          setAssignStatus(
-            `Barcode ${barcode} is already assigned.`,
-            "warning"
-          );
-          barcodeInput.value = "";
-          barcodeInput.focus();
-          return;
-        }
-      } catch (error) {
-        setAssignStatus("Could not check barcode.", "error");
-        return;
-      }
-
-      if (state.barcodeQueue.includes(barcode)) {
-        setAssignStatus(`Barcode ${barcode} is already in the queue.`, "warning");
+        if (data.assigned) throw Error("Barcode already assigned.");
+        state.barcodeQueue.unshift(barcode);
         barcodeInput.value = "";
-        barcodeInput.focus();
-        return;
-      }
-
-      try {
-        const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
-
-        if (data.assigned) {
-          setAssignStatus(`Barcode ${barcode} is already assigned.`, "warning");
-          barcodeInput.value = "";
-          barcodeInput.focus();
-          return;
-        }
-      } catch (error) {
-        setAssignStatus("Could not check barcode.", "error");
-        return;
-      }
-
-      state.barcodeQueue.unshift(barcode);
-
-      barcodeInput.value = "";
-
-      renderBarcodeQueue();
-      updateAssignButton();
-      updateSessionWidgets();
-
-      setAssignStatus(
-        `Barcode ${barcode} added to queue (${state.barcodeQueue.length} queued).`
-      );
-
-      barcodeInput.focus();
+        setAssignStatus(`Added ${barcode}.`);
+      } catch (error) { setAssignStatus(error.message, "warning"); }
+      finally { state.busy = false; syncFlow(); barcodeInput.focus(); }
     });
 
     searchInput.addEventListener("input", () => {
+      invalidateResults();
+      state.proposal = false;
       clearTimeout(state.searchTimer);
       state.searchTimer = setTimeout(() => {
         searchAlbums(searchInput.value);
@@ -1484,6 +1796,7 @@
     });
 
     unassignedOnlyToggle.addEventListener("change", () => {
+      invalidateResults();
       state.unassignedOnly = unassignedOnlyToggle.checked;
       if (searchInput.value.trim()) {
         searchAlbums(searchInput.value);
@@ -1509,7 +1822,7 @@
         return;
       }
 
-      if (event.key === "Enter") {
+      if (event.key === "Enter" && !event.repeat) {
         event.preventDefault();
         if (state.results[state.selectedIndex] && state.barcodeQueue.length > 0) {
           assignSelectedAlbum();
@@ -1527,6 +1840,8 @@
         return;
       }
 
+      if (state.busy || state.phase !== "manual") return;
+      invalidateResults();
       const removed = state.barcodeQueue.shift();
 
       renderBarcodeQueue();
@@ -1537,6 +1852,8 @@
       });
 
       clearQueueButton.addEventListener("click", () => {
+      if (state.busy || state.phase !== "manual") return;
+      invalidateResults();
 
       state.barcodeQueue = [];
 
@@ -1578,6 +1895,7 @@
     loadHistory();
     updateSessionWidgets();
     loadProgress();
+    syncFlow();
     setMode(window.location.hash === "#sort" ? "sort" : "assign");
   </script>
 </body>

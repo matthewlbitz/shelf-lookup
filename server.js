@@ -2,6 +2,11 @@ const path = require("path");
 const express = require("express");
 const Database = require("better-sqlite3");
 
+// Keep credentials server-side; existing environment variables take precedence.
+const fs = require("fs");
+const envPath = path.join(__dirname, ".env");
+if (fs.existsSync(envPath)) process.loadEnvFile(envPath);
+
 const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "masterAlbums.db");
 const SHELF_GROUP_MAX = 32;
@@ -188,6 +193,11 @@ db.exec(
   `
 );
 
+const { normalizeSearch, normalizeExternal, migrateExternal } = require("./catalog-utils");
+migrateExternal(db);
+const { createSearchRanker } = require("./search-ranking");
+let rankSearch = () => 0;
+db.function("search_rank", (artist, title) => rankSearch(artist, title));
 const searchStmt = db.prepare(
   `
     SELECT
@@ -199,9 +209,10 @@ const searchStmt = db.prepare(
       ${quotedBarcodeColumn} AS barcode,
       ${quotedAssignedAtColumn} AS assigned_at
     FROM ${quotedTable}
-    WHERE ${quotedArtistColumn} LIKE @pattern
-       OR ${quotedTitleColumn} LIKE @pattern
-    ORDER BY ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE
+    WHERE (@unassigned = 0 OR COALESCE(TRIM(${quotedBarcodeColumn}), '') = '')
+      AND search_rank(${quotedArtistColumn}, ${quotedTitleColumn}) > 0
+    ORDER BY search_rank(${quotedArtistColumn}, ${quotedTitleColumn}) DESC,
+      ${quotedArtistColumn} COLLATE NOCASE, ${quotedTitleColumn} COLLATE NOCASE, ${quotedIdColumn}
     LIMIT 20
   `
 );
@@ -559,6 +570,11 @@ const progressStmt = quotedNewShelfColumn
 const app = express();
 
 app.use(express.json());
+// Database files include local catalog data and the online lookup cache.
+app.use((req, res, next) => {
+  if (/\.(?:db|sqlite)(?:-|$)/i.test(req.path)) return res.sendStatus(404);
+  next();
+});
 app.use(express.static(__dirname));
 
 app.get("/artist-sorter", (req, res) => {
@@ -664,12 +680,32 @@ app.get("/search", (req, res) => {
     return res.json([]);
   }
 
-  const pattern = `%${q}%`;
-  let results = searchStmt.all({ pattern });
-  if (unassignedOnly) {
-    results = results.filter((row) => !String(row.barcode || "").trim());
-  }
+  rankSearch = createSearchRanker(q);
+  const results = normalizeSearch(q) ? searchStmt.all({ unassigned: Number(unassignedOnly) }) : [];
   return res.json(results);
+});
+
+const { createDiscogsLookup, matchDiscogs } = require("./discogs-lookup");
+const onlineBarcodeLookup = createDiscogsLookup({ db, token: process.env.DISCOGS_TOKEN,
+  offline: process.env.DISCOGS_OFFLINE === "1" });
+const discogsCatalogStmt = hasColumn(existingColumns, "discogs_id") && hasColumn(existingColumns, "discogs_link")
+  ? db.prepare(`SELECT ${quotedIdColumn} AS id, ${quotedArtistColumn} AS artist,
+    ${quotedTitleColumn} AS title, discogs_id, discogs_link FROM ${quotedTable}`) : null;
+app.get("/external-lookup/:code", async (req, res) => {
+  const code = normalizeExternal(req.params.code);
+  if (!code) return res.status(400).json({ error: "Use an 8, 12, 13 or 14 digit UPC/EAN code." });
+  const albums = db.prepare("SELECT album_id FROM album_external_barcodes WHERE code = ?").all(code)
+    .map(row => lookupByIdStmt.get(row.album_id)).filter(Boolean);
+  if (albums.length) return res.json({ code, albums, source: "local" });
+  try {
+    const data = await onlineBarcodeLookup(req.params.code);
+    const match = matchDiscogs(data, discogsCatalogStmt?.all() || []);
+    return res.json({ code, albums: match.ids.map(id => lookupByIdStmt.get(id)).filter(Boolean),
+      suggestions: match.suggestions.map(a => lookupByIdStmt.get(a.id)).filter(Boolean),
+      query: match.query, source: "discogs" });
+  } catch (error) {
+    return res.status(503).json({ error: error.message, unavailable: true });
+  }
 });
 
 app.get("/history", (_req, res) => {
@@ -679,6 +715,20 @@ app.get("/history", (_req, res) => {
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
+});
+
+// Use the station's calendar day, independent of the server's timezone.
+const stationDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" });
+const dailyAssignmentsStmt = db.prepare(`SELECT ${quotedAssignedAtColumn} AS assigned_at
+  FROM ${quotedTable} WHERE COALESCE(TRIM(${quotedBarcodeColumn}), '') <> ''
+    AND ${quotedAssignedAtColumn} IS NOT NULL`);
+app.get("/daily-progress", (_req, res) => {
+  const day = stationDay.format(new Date());
+  const assigned = dailyAssignmentsStmt.all().filter(row => {
+    const date = new Date(row.assigned_at);
+    return !Number.isNaN(date.getTime()) && stationDay.format(date) === day;
+  }).length;
+  res.json({ day, assigned, goal: 1500, timeZone: "America/Chicago" });
 });
 
 app.get("/progress", (_req, res) => {
@@ -734,7 +784,7 @@ app.post("/assign", (req, res) => {
     });
   }
 
-  if (album.barcode && album.barcode !== barcode) {
+  if (album.barcode) {
     return res.status(409).json({
       error: "Album already has a barcode.",
       existingBarcode: album.barcode,
@@ -872,7 +922,9 @@ app.get("/lookup/:barcode", (req, res) => {
   return res.json(album);
 });
 
-app.listen(PORT, () => {
+module.exports = { app, db };
+
+if (require.main === module) app.listen(PORT, () => {
   console.log(`Vinyl shelf app running at http://localhost:${PORT}`);
   console.log(`Database: ${DB_PATH}`);
   console.log(`Album table: ${schema.tableName}`);
