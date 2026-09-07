@@ -2,7 +2,7 @@ const { normalizeExternal } = require('./catalog-utils');
 const { createSearchRanker } = require('./search-ranking');
 
 function createDiscogsLookup({ db, token, fetchImpl = fetch, now = Date.now,
-  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), offline = false }) {
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), offline = false, log = (event, details) => console.log(`[Discogs] ${event} ${JSON.stringify(details)}`) }) {
   db.exec(`CREATE TABLE IF NOT EXISTS discogs_barcode_cache (
     code TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at INTEGER NOT NULL)`);
   const getCache = db.prepare('SELECT payload FROM discogs_barcode_cache WHERE code = ? AND expires_at > ?');
@@ -10,13 +10,18 @@ function createDiscogsLookup({ db, token, fetchImpl = fetch, now = Date.now,
   let tail = Promise.resolve(), nextRequest = 0, interval = 2000, queued = 0;
   const pending = new Map();
   async function request(code) {
-    if (nextRequest > now()) await sleep(nextRequest - now());
+    if (nextRequest > now()) {
+      log('Waiting for request slot', { barcode: code, waitMs: nextRequest - now() });
+      await sleep(nextRequest - now());
+    }
+    log('Searching API', { barcode: code });
     const url = new URL('https://api.discogs.com/database/search');
     url.search = new URLSearchParams({type:'release', barcode:code, per_page:'100'});
     let response;
     try {
       response = await fetchImpl(url, {headers:{Authorization:`Discogs token=${token}`, 'User-Agent':'KTRU-Shelf-Lookup/1.0'}, signal:AbortSignal.timeout(15000)});
     } finally { nextRequest = now() + interval; }
+    log('API response', { barcode: code, status: response.status, limit: response.headers.get('X-Discogs-Ratelimit'), remaining: response.headers.get('X-Discogs-Ratelimit-Remaining') });
     const limit = Number(response.headers.get('X-Discogs-Ratelimit'));
     if (limit > 0) interval = Math.max(2000, Math.ceil(60000 / limit) + 250);
     nextRequest = Math.max(nextRequest, now() + interval);
@@ -26,6 +31,7 @@ function createDiscogsLookup({ db, token, fetchImpl = fetch, now = Date.now,
       const retry = response.headers.get('Retry-After');
       const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - now();
       nextRequest = now() + Math.max(60000, Number.isFinite(delay) ? delay : 0);
+      log('Cooldown', { barcode: code, waitMs: nextRequest - now() });
       const error = Error('Discogs is busy or rate-limited. Manual search is available; online requests will pause.');
       error.retryable = true;
       throw error;
@@ -42,12 +48,13 @@ function createDiscogsLookup({ db, token, fetchImpl = fetch, now = Date.now,
     const code = normalizeExternal(raw);
     if (!code) throw Error('Invalid UPC/EAN code.');
     const cached = getCache.get(code, now());
-    if (cached) return JSON.parse(cached.payload);
-    if (offline) return {results:[], truncated:false};
+    if (cached) { log('Cache hit — no API request', { barcode: code }); return JSON.parse(cached.payload); }
+    if (offline) { log('Offline mode — no API request', { barcode: code }); return {results:[], truncated:false}; }
     if (!token) throw Error('Online barcode lookup is not configured. Add DISCOGS_TOKEN to the server .env file.');
-    if (pending.has(code)) return pending.get(code);
+    if (pending.has(code)) { log('Sharing queued lookup', { barcode: code }); return pending.get(code); }
     if (queued >= 100) throw Error('Lookup queue is full. Let the current scans finish first.');
     queued++;
+    log('Queued', { barcode: code, pending: queued });
     const work = tail.then(async () => {
       // Preserve the scanned digit length for Discogs; padding is only a local cache key.
       const query = String(raw).replace(/[\s-]/g, '');

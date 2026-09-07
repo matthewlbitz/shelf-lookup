@@ -686,6 +686,9 @@ app.get("/search", (req, res) => {
 });
 
 const { createDiscogsLookup, matchDiscogs } = require("./discogs-lookup");
+function logBarcode(event, details) {
+  console.log(`[Barcode lookup] ${event} ${JSON.stringify(details)}`);
+}
 const onlineBarcodeLookup = createDiscogsLookup({ db, token: process.env.DISCOGS_TOKEN,
   offline: process.env.DISCOGS_OFFLINE === "1" });
 const discogsCatalogStmt = hasColumn(existingColumns, "discogs_id") && hasColumn(existingColumns, "discogs_link")
@@ -694,16 +697,30 @@ const discogsCatalogStmt = hasColumn(existingColumns, "discogs_id") && hasColumn
 app.get("/external-lookup/:code", async (req, res) => {
   const code = normalizeExternal(req.params.code);
   if (!code) return res.status(400).json({ error: "Use an 8, 12, 13 or 14 digit UPC/EAN code." });
+  logBarcode("Scan received", { barcode: req.params.code, normalized: code });
   const albums = db.prepare("SELECT album_id FROM album_external_barcodes WHERE code = ?").all(code)
     .map(row => lookupByIdStmt.get(row.album_id)).filter(Boolean);
-  if (albums.length) return res.json({ code, albums, source: "local" });
+  if (albums.length) {
+    logBarcode("Local barcode mapping — no Discogs request", { code, albums });
+    return res.json({ code, albums, source: "local" });
+  }
   try {
     const data = await onlineBarcodeLookup(req.params.code);
+    logBarcode("Discogs search results (live or cached)", { code, count: data.results.length, truncated: data.truncated, releases: data.results });
     const match = matchDiscogs(data, discogsCatalogStmt?.all() || []);
+    logBarcode("Local catalog comparison", {
+      code,
+      idMatches: match.ids.map(id => lookupByIdStmt.get(id)).filter(Boolean),
+      textSuggestions: match.suggestions,
+      outcome: match.ids.length === 1 ? "ID match found — operator confirmation still required"
+        : match.ids.length > 1 ? "Multiple ID matches — manual search required"
+        : "No verified local ID match — manual search required"
+    });
     return res.json({ code, albums: match.ids.map(id => lookupByIdStmt.get(id)).filter(Boolean),
       suggestions: match.suggestions.map(a => lookupByIdStmt.get(a.id)).filter(Boolean),
       query: match.query, source: "discogs" });
   } catch (error) {
+    logBarcode("Lookup failed", { code, error: error.message });
     return res.status(503).json({ error: error.message, unavailable: true });
   }
 });
