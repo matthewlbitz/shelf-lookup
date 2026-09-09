@@ -132,3 +132,25 @@ This is an actively developed operational tool. Current work focuses on expandin
 **Matthew Bitz**<br>
 Computer Science, Rice University<br>
 [GitHub](https://github.com/matthewlbitz)
+
+### Ordered searching
+
+Turn on **Ordered searching**, scan the first barcode in the stack, and search
+for and assign that CD normally. Then scan the last barcode and assign its CD.
+The app automatically prepares the first barcode plus or minus one, depending on
+which direction leads toward the last barcode. No batch size or range entry is
+needed. Both endpoint CDs are already assigned and are skipped in the interior pass.
+
+Return to the second CD. Suggested tiles follow original album ID order; use
+arrow keys to choose and Enter to assign. Each assignment advances the barcode
+automatically. Manual search stays available for misplaced CDs, and each confirmed
+interior album guides the next prediction. Barcode direction and ID direction can
+each run forward or backward independently.
+
+After the interior CDs are done, scan the first barcode of another stack to
+continue, or uncheck **Ordered searching**. Toggling it clears the pending queue
+but keeps completed assignments. **Undo Last** restores the corresponding ordered
+step for assignments made in this active ordered session. A page reload resets
+the mode. External barcode matching remains available when ordered searching is off.
+
+Run checks with `node --test test/ordered-search.test.js`.

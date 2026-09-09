@@ -777,6 +777,13 @@
       isolation: isolate;
     }
     .pinned-daily .daily-level { margin-top: 12px; }
+    #likelyPanel { padding: 12px; border-bottom: 1px solid var(--border); }
+    .likely-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 8px; max-height: 360px; overflow-y: auto; }
+    .likely-card { text-align: left; padding: 10px; }
+    .likely-card img { width: 64px; height: 64px; object-fit: cover; display: block; margin-bottom: 6px; }
+    .likely-card.active { outline: 3px solid var(--accent); outline-offset: -3px; }
+    .likely-card:focus-visible { outline: 3px solid var(--accent-strong); }
+    .likely-card span { display: block; font-size: 12px; margin-top: 4px; }
     @media (min-width: 1181px) {
       .main-column > .panel { min-height: 600px; }
     }
@@ -843,6 +850,11 @@
         <section class="panel active" id="assignPanel">
           <div class="grid">
             <div>
+              <label class="inline-toggle" for="orderedToggle">
+                <input id="orderedToggle" type="checkbox" aria-controls="orderedStatus likelyPanel" />
+                <span>Ordered searching</span>
+              </label>
+              <p id="orderedStatus" class="hint" role="status" hidden></p>
               <div class="field">
                 <label for="barcodeInput">Internal KTRU barcode</label>
                 <input id="barcodeInput" autocomplete="off" inputmode="numeric" placeholder="Scan barcode and press Enter" />
@@ -907,6 +919,11 @@
             </div>
 
             <div class="results" id="resultsBox">
+              <section id="likelyPanel" hidden aria-label="Likely next albums">
+                <strong>Likely next</strong>
+                <p id="likelyStatus" class="hint" role="status"></p>
+                <div id="likelyAlbums" class="likely-grid"></div>
+              </section>
               <div class="results-header">Search results</div>
               <div id="results"></div>
             </div>
@@ -1007,8 +1024,11 @@
       </aside>
     </div>
 
+  <script src="/ordered-search.js"></script>
   <script>
     const state = {
+      ordered: null, orderedUndo: new Map(), suggestionVersion: 0, suggestionKey: null,
+      likelyAlbums: [], resultsSource: "search",
       mode: "assign",
       barcodeQueue: [],
       results: [],
@@ -1273,6 +1293,15 @@
 
     function renderResults() {
       resultsEl.innerHTML = "";
+      document.querySelectorAll(".likely-card").forEach((button, index) => {
+        const selected = state.resultsSource === "likely" && index === state.selectedIndex;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      });
+      if (state.resultsSource === "likely") {
+        resultsEl.textContent = "Use arrow keys to choose a tile and Enter to assign. Type in search for another album.";
+        updateAssignButton(); return;
+      }
 
       if (state.results.length === 0) {
         const empty = document.createElement("div");
@@ -1437,6 +1466,7 @@
       const trimmed = query.trim();
       if (state.phase === "external" || state.busy) return;
 
+      if (!trimmed && state.likelyAlbums.length) { selectLikely(0, false); return; }
       if (!trimmed) {
         state.results = [];
         state.selectedIndex = -1;
@@ -1490,6 +1520,11 @@
         return;
       }
 
+      let nextOrdered = null;
+      const previousOrdered = state.ordered && { ...state.ordered };
+      try {
+        if (state.ordered) nextOrdered = OrderedSearch.advance(state.ordered, barcode);
+      } catch (error) { setAssignStatus(error.message, "warning"); return; }
       state.busy = true;
       invalidateResults(false);
       syncFlow();
@@ -1512,7 +1547,13 @@
           assigned_at: data.album.assigned_at
         });
         state.recentAssignments = state.recentAssignments.slice(0, 8);
+        state.suggestionKey = null;
         state.barcodeQueue.shift();
+        if (nextOrdered) {
+          state.orderedUndo.set(data.historyId, previousOrdered);
+          state.ordered = nextOrdered;
+          state.barcodeQueue = nextOrdered.current ? [nextOrdered.current] : [];
+        }
         barcodeInput.value = "";
 
         renderBarcodeQueue();
@@ -1541,7 +1582,7 @@
           setAssignStatus(error.message || "Assignment failed.", "error");
         }
         searchInput.focus();
-      } finally { state.busy = false; syncFlow(); if (state.awaitingDecision) { if (state.proposal) assignButton.focus(); else rejectMatch.focus(); } else searchInput.focus(); }
+      } finally { state.busy = false; syncFlow(); if (state.awaitingDecision) { if (state.proposal) assignButton.focus(); else rejectMatch.focus(); } else if (state.ordered && !state.barcodeQueue.length) barcodeInput.focus(); else searchInput.focus(); }
     }
 
     async function undoLastAssignment() {
@@ -1550,6 +1591,12 @@
       try {
         const data = await fetchJson("/undo-last-assignment", { method: "POST" });
 
+        state.suggestionKey = null;
+        if (state.ordered && state.orderedUndo.has(data.assignment.id)) {
+          state.ordered = state.orderedUndo.get(data.assignment.id);
+          state.orderedUndo.delete(data.assignment.id);
+          state.barcodeQueue = [data.assignment.barcode];
+        }
         setAssignStatus(`Undid barcode ${data.assignment.barcode} from ${data.assignment.artist} - ${data.assignment.title}.`, "warning");
 
         invalidateResults();
@@ -1581,6 +1628,7 @@
       searchInput.value = "";
       renderResults();
       renderBarcodeQueue();
+      syncFlow();
       setAssignStatus("");
       updateSessionWidgets();
       barcodeInput.focus();
@@ -1660,6 +1708,7 @@
       return data;
     }
 
+    const orderedToggle = document.getElementById("orderedToggle");
     const externalInput = document.getElementById("externalInput");
     const externalToggle = document.getElementById("externalToggle");
     const skipExternal = document.getElementById("skipExternal");
@@ -1667,9 +1716,11 @@
     function invalidateResults(clear = true) {
       ++state.searchVersion;
       clearTimeout(state.searchTimer);
-      if (clear) { state.results = []; state.selectedIndex = -1; renderResults(); }
+      if (clear) { state.resultsSource = "search"; state.results = []; state.selectedIndex = -1; renderResults(); }
     }
     function syncFlow() {
+      renderOrderedStatus();
+      refreshLikely();
       const external = state.phase === "external";
       const current = state.barcodeQueue[external ? state.externalIndex : 0];
       document.getElementById("phaseStatus").textContent = external
@@ -1681,15 +1732,19 @@
       const readyToScan = externalToggle.checked && state.phase === "manual" && state.barcodeQueue.length > 0;
       externalInput.disabled = state.busy || !(external || readyToScan);
       skipExternal.disabled = externalInput.disabled;
-      externalToggle.disabled = state.busy || state.phase !== "manual";
+      externalToggle.disabled = state.busy || state.phase !== "manual" || !!state.ordered;
       document.getElementById("externalFields").hidden = !externalToggle.checked;
       document.getElementById("externalScanField").hidden = state.phase === "verify";
       document.getElementById("manualHint").hidden = externalToggle.checked;
+      orderedToggle.disabled = state.busy || state.phase !== "manual";
+      document.getElementById("manualHint").textContent = state.ordered
+        ? "Arrow keys choose an album; Enter assigns. Manual search is always available."
+        : "Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.";
       if (state.phase !== "verify") document.getElementById("noMatchNotice").hidden = true;
       searchInput.disabled = state.busy || external;
       searchInput.parentElement.hidden = state.awaitingDecision || external;
       unassignedOnlyToggle.parentElement.hidden = state.awaitingDecision || external;
-      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual");
+      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual" || state.ordered?.stage === "interior");
       undoButton.disabled = state.busy || external;
       rejectMatch.hidden = !state.awaitingDecision;
       rejectMatch.disabled = state.busy;
@@ -1697,6 +1752,98 @@
       renderBarcodeQueue(); updateSessionWidgets(); updateAssignButton();
       if (external) sessionBarcodeEl.textContent = current;
     }
+    function refreshLikely() {
+      const panel = document.getElementById("likelyPanel");
+      const status = document.getElementById("likelyStatus");
+      const grid = document.getElementById("likelyAlbums");
+      panel.hidden = state.ordered?.stage !== "interior" || state.phase !== "manual" || externalToggle.checked;
+      grid.querySelectorAll("button").forEach(b => b.disabled = state.busy);
+      const barcode = state.barcodeQueue[0];
+      const key = JSON.stringify([state.ordered, barcode, panel.hidden]);
+      if (state.suggestionKey === key) return;
+      state.suggestionKey = key;
+      const version = ++state.suggestionVersion;
+      grid.replaceChildren(); state.likelyAlbums = [];
+      if (state.resultsSource === "likely") invalidateResults();
+      if (panel.hidden) return;
+      if (!barcode) { status.textContent = "Scan a barcode to continue."; return; }
+      status.textContent = "Finding nearby albums…";
+      const params = new URLSearchParams({ firstBarcode: state.ordered.first, lastBarcode: state.ordered.last, barcode });
+      fetchJson(`/ordered-suggestions?${params}`).then(data => {
+        if (version !== state.suggestionVersion) return;
+        status.textContent = data.reason;
+        state.likelyAlbums = data.albums;
+        for (const [index, album] of data.albums.entries()) {
+          const button = document.createElement("button");
+          button.type = "button"; button.className = "likely-card secondary"; button.disabled = state.busy;
+          if (album.cover_image && /^https?:\/\//i.test(album.cover_image)) {
+            const img = document.createElement("img"); img.src = album.cover_image; img.alt = ""; img.loading = "lazy";
+            img.addEventListener("error", () => img.remove()); button.append(img);
+          }
+          for (const text of [album.artist, album.title, `ID ${album.id} · Old shelf: ${album.old_shelf || "—"}`]) {
+            const span = document.createElement("span"); span.textContent = text; button.append(span);
+          }
+          button.addEventListener("focus", () => {
+            if (!state.busy && version === state.suggestionVersion) selectLikely(index, false);
+          });
+          button.addEventListener("click", () => {
+            if (state.busy || version !== state.suggestionVersion) return;
+            selectLikely(index, true);
+          });
+          grid.append(button);
+        }
+        if (!searchInput.value.trim() && !state.busy && data.albums.length) selectLikely(0, false);
+      }).catch(error => { if (version === state.suggestionVersion) { status.textContent = `Suggestions unavailable: ${error.message} Manual search is still available.`; state.suggestionKey = null; } });
+    }
+    function selectLikely(index, focus) {
+      if (!state.likelyAlbums.length || state.busy) return;
+      invalidateResults(); searchInput.value = "";
+      state.resultsSource = "likely"; state.results = state.likelyAlbums;
+      state.selectedIndex = Math.max(0, Math.min(index, state.results.length - 1));
+      renderResults();
+      const button = document.getElementById("likelyAlbums").children[state.selectedIndex];
+      button?.scrollIntoView({ block: "nearest" });
+      if (focus) button?.focus();
+    }
+    function moveLikely(event) {
+      if (!event.key.startsWith("Arrow") || state.resultsSource !== "likely" || state.busy) return false;
+      const grid = document.getElementById("likelyAlbums");
+      const buttons = [...grid.children];
+      const columns = buttons.filter(b => b.offsetTop === buttons[0]?.offsetTop).length || 1;
+      const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns }[event.key];
+      if (delta === undefined) return false;
+      event.preventDefault(); selectLikely(state.selectedIndex + delta, event.target !== searchInput); return true;
+    }
+    document.getElementById("likelyAlbums").addEventListener("keydown", event => {
+      if (moveLikely(event)) return;
+      if (event.key === "Enter") {
+        event.preventDefault(); if (!event.repeat && !state.busy) assignSelectedAlbum();
+      }
+    });
+    function renderOrderedStatus() {
+      const status = document.getElementById("orderedStatus");
+      const ordered = state.ordered;
+      status.hidden = !ordered;
+      if (!ordered) { status.textContent = ""; return; }
+      if (ordered.stage === "first" || ordered.stage === "last") {
+        status.textContent = state.barcodeQueue.length
+          ? `Assign the ${ordered.stage} CD to barcode ${state.barcodeQueue[0]} using search below.`
+          : `Scan the ${ordered.stage} barcode in the stack, then search for the CD and assign it.`;
+      } else if (ordered.stage === "interior") {
+        const atSecond = BigInt(ordered.current) === BigInt(ordered.first) + OrderedSearch.barcodeStep(ordered.first, ordered.last);
+        status.textContent = `Next barcode: ${ordered.current}. ${atSecond ? "Return to the second CD." : "Continue with the next CD."} The last CD is already assigned.`;
+      } else {
+        status.textContent = "Stack complete. Scan the first barcode of the next stack, or turn off Ordered searching.";
+      }
+    }
+    orderedToggle.addEventListener("change", () => {
+      if (state.busy || state.phase !== "manual") return;
+      state.ordered = orderedToggle.checked ? { stage: "first" } : null;
+      state.orderedUndo.clear(); state.barcodeQueue = [];
+      state.suggestionKey = null; invalidateResults(); searchInput.value = ""; barcodeInput.value = "";
+      if (state.ordered) externalToggle.checked = false;
+      setAssignStatus(""); syncFlow(); barcodeInput.focus();
+    });
     function showVerification() {
       document.getElementById("noMatchNotice").hidden = true;
       invalidateResults(); state.proposal = false; state.awaitingDecision = false; searchInput.value = "";
@@ -1776,14 +1923,24 @@
       if (!barcode) return;
       state.busy = true; invalidateResults(); syncFlow();
       try {
+        if (state.ordered) {
+          OrderedSearch.numericBarcode(barcode);
+          if (state.ordered.stage === "interior") {
+            if (barcode !== state.ordered.current) throw Error(`Expected barcode ${state.ordered.current}. Ordered searching advances automatically.`);
+            barcodeInput.value = ""; state.suggestionKey = null; return;
+          }
+          if (state.ordered.stage === "last") OrderedSearch.barcodeStep(state.ordered.first, barcode);
+          if (state.barcodeQueue.length) throw Error("Assign the scanned CD before scanning another barcode.");
+        }
         if (state.barcodeQueue.includes(barcode)) throw Error("Barcode already queued.");
         const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
         if (data.assigned) throw Error("Barcode already assigned.");
+        if (state.ordered?.stage === "complete") { state.ordered = { stage: "first" }; state.orderedUndo.clear(); }
         state.barcodeQueue.unshift(barcode);
         barcodeInput.value = "";
         setAssignStatus(`Added ${barcode}.`);
       } catch (error) { setAssignStatus(error.message, "warning"); }
-      finally { state.busy = false; syncFlow(); barcodeInput.focus(); }
+      finally { state.busy = false; if (state.ordered) state.suggestionKey = null; syncFlow(); if (state.ordered && state.barcodeQueue.length) searchInput.focus(); else barcodeInput.focus(); }
     });
 
     searchInput.addEventListener("input", () => {
@@ -1804,6 +1961,7 @@
     });
 
     searchInput.addEventListener("keydown", (event) => {
+      if (moveLikely(event)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         if (state.results.length > 0) {
@@ -1848,6 +2006,7 @@
       updateAssignButton();
       updateSessionWidgets();
 
+      syncFlow();
       setAssignStatus(`Removed barcode ${removed} from the queue.`);
       });
 
@@ -1861,6 +2020,7 @@
       updateAssignButton();
       updateSessionWidgets();
 
+      syncFlow();
       setAssignStatus("Barcode queue cleared.");
     });
 

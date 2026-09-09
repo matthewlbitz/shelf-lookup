@@ -672,6 +672,22 @@ app.get("/health", (_req, res) => {
   });
 });
 
+const { suggestAlbums } = require("./ordered-search");
+const orderedAlbumsStmt = db.prepare(`SELECT ${quotedIdColumn} AS id,
+  ${quotedArtistColumn} AS artist, ${quotedTitleColumn} AS title,
+  ${quotedCurrentShelfColumn || 'NULL'} AS old_shelf, ${lookupShelfSelect},
+  ${quotedBarcodeColumn} AS barcode, ${quotedAssignedAtColumn} AS assigned_at,
+  ${hasColumn(existingColumns, 'cover_image') ? quoteIdentifier('cover_image') : 'NULL'} AS cover_image
+  FROM ${quotedTable}`);
+app.get("/ordered-suggestions", (req, res) => {
+  try {
+    res.json(suggestAlbums(orderedAlbumsStmt.all(), String(req.query.firstBarcode || ''),
+      String(req.query.lastBarcode || ''), String(req.query.barcode || '')));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.get("/search", (req, res) => {
   const q = String(req.query.q || "").trim();
   const unassignedOnly = String(req.query.unassigned || "") === "1";
