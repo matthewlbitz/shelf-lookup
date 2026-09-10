@@ -1,33 +1,29 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {advance, suggestAlbums, barcodeStep} = require('../ordered-search');
+const {advance, suggestAlbums, barcodeStep, range} = require('../ordered-search');
 
-test('first and last are assigned before interior barcodes, in either direction', () => {
- for (const [first,last,expected] of [['900','904',['901','902','903']],['904','900',['903','902','901']]]) {
-  let ordered = advance({stage:'first'}, first);
-  assert.deepEqual(ordered,{stage:'last',first});
-  ordered = advance(ordered,last);
-  for (const code of expected) {
+test('inclusive queues assign the entire stack in physical order in either direction', () => {
+ for (const [first,last,expected] of [['100','103',['100','101','102','103']],['100','97',['100','99','98','97']],['100','100',['100']]]) {
+  const queue = range(first,last);
+  assert.deepEqual(queue,expected);
+  let ordered = {stage:'assign',first,last,current:queue[0]};
+  for (const code of queue) {
    assert.equal(ordered.current,code);
    ordered = advance(ordered,code);
   }
   assert.equal(ordered.stage,'complete');
   assert.equal(ordered.current,null);
  }
+ assert.equal(range('100','130').length,31);
+ assert.equal(range('100','70').length,31);
 });
-test('adjacent endpoints finish immediately; duplicate endpoints cannot assign', () => {
- assert.equal(advance(advance({stage:'first'},'900'),'901').stage,'complete');
- assert.equal(advance(advance({stage:'first'},'900'),'899').stage,'complete');
- assert.throws(()=>advance({stage:'last',first:'900'},'0900'));
-});
-test('barcodes retain explicit padding and exact large numbers, but do not invent padding', () => {
- assert.equal(advance({stage:'last',first:'00900'},'00930').current,'00901');
- let ordered=advance({stage:'last',first:'1000'},'997');
- assert.equal(ordered.current,'999');
- assert.equal(advance(ordered,'999').current,'998');
- assert.equal(advance({stage:'last',first:'90071992547409930'},'90071992547409960').current,'90071992547409931');
- assert.throws(()=>barcodeStep('abc','100'));
- assert.throws(()=>advance(ordered,'1001'));
+test('range preserves padding and exact large values across digit boundaries', () => {
+ assert.deepEqual(range('0099','0101'),['0099','0100','0101']);
+ assert.deepEqual(range('1000','998'),['1000','999','998']);
+ assert.deepEqual(range('90071992547409930','90071992547409932'),['90071992547409930','90071992547409931','90071992547409932']);
+ assert.throws(()=>range('abc','100'));
+ assert.throws(()=>advance({stage:'last',first:'100'},'102'));
+ assert.throws(()=>advance({stage:'assign',first:'100',last:'102',current:'100'},'101'));
 });
 test('all four combinations of barcode and ID direction predict the second CD', () => {
  for (const [firstBarcode,lastBarcode,current] of [['900','904','901'],['904','900','903']]) {
@@ -56,4 +52,61 @@ test('endpoints and out-of-range barcodes are excluded; missing endpoints fail c
  for (const barcode of ['99','100','102','103']) assert.deepEqual(suggestAlbums(rows,'100','102',barcode).albums,[]);
  assert.throws(()=>suggestAlbums(rows,'100','104','101'));
  assert.throws(()=>suggestAlbums(rows,'100','102','abc'));
+});
+
+test('page scans both endpoints before queuing and focuses assignment only after the last scan', async () => {
+ const vm = require('node:vm');
+ const html = require('node:fs').readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+ const start = html.indexOf('barcodeInput.addEventListener("keydown", async');
+ const end = html.indexOf('searchInput.addEventListener("input"', start);
+ for (const [first,last] of [['100','130'],['100','70'],['001','001']]) {
+  let handler, focus;
+  const state = {busy:false,phase:'manual',ordered:{stage:'first'},orderedUndo:new Map(),barcodeQueue:[]};
+  const input = {value:'',focus:()=>{focus='scan';},addEventListener:(_,fn)=>{handler=fn;}};
+  vm.runInNewContext(html.slice(start,end), {
+   state, barcodeInput:input, searchInput:{focus:()=>{focus='search';}},
+   OrderedSearch:require('../ordered-search'), invalidateResults:()=>{},syncFlow:()=>{},
+   setAssignStatus:()=>{},fetchJson:async()=>({assigned:false})
+  });
+  const scan = async code => {input.value=code;await handler({key:'Enter',preventDefault(){}});};
+  await scan(first);
+  assert.equal(state.ordered.stage,'last');
+  assert.equal(state.barcodeQueue.length,0);
+  assert.equal(focus,'scan');
+  await scan(last);
+  assert.deepEqual(state.barcodeQueue,range(first,last));
+  assert.equal(state.ordered.current,first);
+  assert.equal(focus,'search');
+  const before = [...state.barcodeQueue];
+  await scan('999');
+  assert.deepEqual(state.barcodeQueue,before);
+ }
+});
+
+test('queue controls remove ordered barcodes and reset endpoint capture when cleared', () => {
+ const vm = require('node:vm');
+ const html = require('node:fs').readFileSync(require('node:path').join(__dirname,'../index.html'),'utf8');
+ const start = html.indexOf('    removeScanButton.addEventListener("click"');
+ const end = html.indexOf('    sortBarcodeInput.addEventListener',start);
+ for (const [first,last] of [['100','102'],['102','100'],['100','100']]) {
+  let remove, clear;
+  const state = {busy:false,phase:'manual',barcodeQueue:range(first,last),ordered:{stage:'assign',first,last,current:first},orderedUndo:new Map()};
+  vm.runInNewContext(html.slice(start,end),{
+   state,removeScanButton:{addEventListener:(_,fn)=>remove=fn},clearQueueButton:{addEventListener:(_,fn)=>clear=fn},
+   barcodeInput:{value:'',focus(){}},searchInput:{focus(){}},invalidateResults(){},syncFlow(){},setAssignStatus(){},
+   renderBarcodeQueue(){},updateAssignButton(){},updateSessionWidgets(){}
+  });
+  remove();
+  assert.deepEqual(state.barcodeQueue,range(first,last).slice(1));
+  if (state.barcodeQueue.length) {
+   assert.equal(state.ordered.current,state.barcodeQueue[0]);
+   assert.doesNotThrow(()=>advance(state.ordered,state.barcodeQueue[0]));
+  } else assert.equal(state.ordered.stage,'first');
+  clear();
+  assert.equal(state.barcodeQueue.length,0);
+  assert.equal(state.ordered.stage,'first');
+  state.ordered={stage:'last',first};
+  remove();
+  assert.equal(state.ordered.stage,'first');
+ }
 });

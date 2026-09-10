@@ -14,20 +14,22 @@
   function formatBarcode(value, first) {
     return first.startsWith('0') ? String(value).padStart(first.length, '0') : String(value);
   }
-  function advance(ordered, barcode) {
-    numericBarcode(barcode);
-    if (ordered.stage === 'first') return { stage: 'last', first: barcode };
-    if (ordered.stage === 'last') {
-      const step = barcodeStep(ordered.first, barcode);
-      const next = numericBarcode(ordered.first) + step;
-      return { stage: next === numericBarcode(barcode) ? 'complete' : 'interior',
-        first: ordered.first, last: barcode,
-        current: next === numericBarcode(barcode) ? null : formatBarcode(next, ordered.first) };
+  function range(first, last) {
+    const a = numericBarcode(first), b = numericBarcode(last);
+    const step = b >= a ? 1n : -1n;
+    const codes = [];
+    for (let value = a; ; value += step) {
+      codes.push(formatBarcode(value, first));
+      if (value === b) return codes;
     }
-    if (ordered.stage !== 'interior' || barcode !== ordered.current) throw new Error('Assign the current ordered barcode.');
-    const next = numericBarcode(barcode) + barcodeStep(ordered.first, ordered.last);
-    return { ...ordered, stage: next === numericBarcode(ordered.last) ? 'complete' : 'interior',
-      current: next === numericBarcode(ordered.last) ? null : formatBarcode(next, ordered.first) };
+  }
+  function advance(ordered, barcode) {
+    if (ordered.stage !== 'assign' || barcode !== ordered.current) {
+      throw new Error('Scan both endpoints, then assign the current ordered barcode.');
+    }
+    const complete = numericBarcode(barcode) === numericBarcode(ordered.last);
+    return { ...ordered, stage: complete ? 'complete' : 'assign',
+      current: complete ? null : formatBarcode(numericBarcode(barcode) + barcodeStep(ordered.first, ordered.last), ordered.first) };
   }
   function suggestAlbums(albums, firstBarcode, lastBarcode, barcode) {
     const step = barcodeStep(firstBarcode, lastBarcode);
@@ -55,7 +57,7 @@
     return { albums: suggestions, direction, anchor,
       reason: `Barcode ${barcode}: next unassigned IDs ${direction > 0 ? 'above' : 'below'} ${anchor.id}, followed by nearby alternatives. Arrow keys choose; Enter assigns.` };
   }
-  const api = { numericBarcode, barcodeStep, advance, suggestAlbums };
+  const api = { numericBarcode, barcodeStep, range, advance, suggestAlbums };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OrderedSearch = api;
 })(typeof window !== 'undefined' ? window : this);

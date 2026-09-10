@@ -1552,7 +1552,7 @@
         if (nextOrdered) {
           state.orderedUndo.set(data.historyId, previousOrdered);
           state.ordered = nextOrdered;
-          state.barcodeQueue = nextOrdered.current ? [nextOrdered.current] : [];
+          // The inclusive queue already contains every remaining CD.
         }
         barcodeInput.value = "";
 
@@ -1595,7 +1595,7 @@
         if (state.ordered && state.orderedUndo.has(data.assignment.id)) {
           state.ordered = state.orderedUndo.get(data.assignment.id);
           state.orderedUndo.delete(data.assignment.id);
-          state.barcodeQueue = [data.assignment.barcode];
+          state.barcodeQueue = OrderedSearch.range(state.ordered.current, state.ordered.last);
         }
         setAssignStatus(`Undid barcode ${data.assignment.barcode} from ${data.assignment.artist} - ${data.assignment.title}.`, "warning");
 
@@ -1622,6 +1622,7 @@
       if (state.busy || state.phase !== "manual") return;
       invalidateResults();
       state.barcodeQueue = [];
+      if (state.ordered) { state.ordered = { stage: "first" }; state.orderedUndo.clear(); }
       state.results = [];
       state.selectedIndex = -1;
       barcodeInput.value = "";
@@ -1744,7 +1745,7 @@
       searchInput.disabled = state.busy || external;
       searchInput.parentElement.hidden = state.awaitingDecision || external;
       unassignedOnlyToggle.parentElement.hidden = state.awaitingDecision || external;
-      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual" || state.ordered?.stage === "interior");
+      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual");
       undoButton.disabled = state.busy || external;
       rejectMatch.hidden = !state.awaitingDecision;
       rejectMatch.disabled = state.busy;
@@ -1825,17 +1826,17 @@
       const ordered = state.ordered;
       status.hidden = !ordered;
       if (!ordered) { status.textContent = ""; return; }
-      if (ordered.stage === "first" || ordered.stage === "last") {
-        status.textContent = state.barcodeQueue.length
-          ? `Assign the ${ordered.stage} CD to barcode ${state.barcodeQueue[0]} using search below.`
-          : `Scan the ${ordered.stage} barcode in the stack, then search for the CD and assign it.`;
-      } else if (ordered.stage === "interior") {
-        const atSecond = BigInt(ordered.current) === BigInt(ordered.first) + OrderedSearch.barcodeStep(ordered.first, ordered.last);
-        status.textContent = `Next barcode: ${ordered.current}. ${atSecond ? "Return to the second CD." : "Continue with the next CD."} The last CD is already assigned.`;
+      if (ordered.stage === "first") {
+        status.textContent = "Scan the first barcode in the stack.";
+      } else if (ordered.stage === "last") {
+        status.textContent = `First barcode: ${ordered.first}. Now scan the last barcode to generate the full queue.`;
+      } else if (ordered.stage === "assign") {
+        status.textContent = `Assign barcode ${ordered.current}. Work from the first CD down the stack; no more scans needed.`;
       } else {
         status.textContent = "Stack complete. Scan the first barcode of the next stack, or turn off Ordered searching.";
       }
     }
+
     orderedToggle.addEventListener("change", () => {
       if (state.busy || state.phase !== "manual") return;
       state.ordered = orderedToggle.checked ? { stage: "first" } : null;
@@ -1925,17 +1926,25 @@
       try {
         if (state.ordered) {
           OrderedSearch.numericBarcode(barcode);
-          if (state.ordered.stage === "interior") {
-            if (barcode !== state.ordered.current) throw Error(`Expected barcode ${state.ordered.current}. Ordered searching advances automatically.`);
-            barcodeInput.value = ""; state.suggestionKey = null; return;
+          if (state.ordered.stage === "assign") throw Error("Assign the queued CDs before scanning another stack.");
+          const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
+          if (data.assigned) throw Error("Barcode already assigned.");
+          if (state.ordered.stage === "first" || state.ordered.stage === "complete") {
+            state.ordered = { stage: "last", first: barcode };
+            state.orderedUndo.clear();
+            setAssignStatus("First barcode saved. Scan the last barcode.");
+          } else {
+            const queue = OrderedSearch.range(state.ordered.first, barcode);
+            state.ordered = { stage: "assign", first: state.ordered.first, last: barcode, current: queue[0] };
+            state.barcodeQueue = queue;
+            setAssignStatus(`Queued ${queue.length} barcodes. Start assigning the first CD in the stack.`);
           }
-          if (state.ordered.stage === "last") OrderedSearch.barcodeStep(state.ordered.first, barcode);
-          if (state.barcodeQueue.length) throw Error("Assign the scanned CD before scanning another barcode.");
+          barcodeInput.value = "";
+          return;
         }
         if (state.barcodeQueue.includes(barcode)) throw Error("Barcode already queued.");
         const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
         if (data.assigned) throw Error("Barcode already assigned.");
-        if (state.ordered?.stage === "complete") { state.ordered = { stage: "first" }; state.orderedUndo.clear(); }
         state.barcodeQueue.unshift(barcode);
         barcodeInput.value = "";
         setAssignStatus(`Added ${barcode}.`);
@@ -1993,35 +2002,39 @@
     undoButton.addEventListener("click", undoLastAssignment);
 
     removeScanButton.addEventListener("click", () => {
-
-      if (state.barcodeQueue.length === 0) {
-        return;
-      }
-
       if (state.busy || state.phase !== "manual") return;
+      if (!state.barcodeQueue.length && state.ordered?.stage !== "last") return;
       invalidateResults();
-      const removed = state.barcodeQueue.shift();
-
-      renderBarcodeQueue();
-      updateAssignButton();
-      updateSessionWidgets();
-
+      const removed = state.barcodeQueue.shift() || state.ordered.first;
+      if (state.ordered) {
+        state.ordered = state.barcodeQueue.length
+          ? { ...state.ordered, current: state.barcodeQueue[0] }
+          : { stage: "first" };
+        // A changed queue starts a new undo context so removed codes stay removed.
+        state.orderedUndo.clear();
+      }
+      barcodeInput.value = "";
       syncFlow();
       setAssignStatus(`Removed barcode ${removed} from the queue.`);
-      });
+      if (state.barcodeQueue.length) searchInput.focus();
+      else barcodeInput.focus();
+    });
 
       clearQueueButton.addEventListener("click", () => {
       if (state.busy || state.phase !== "manual") return;
       invalidateResults();
 
       state.barcodeQueue = [];
+      if (state.ordered) { state.ordered = { stage: "first" }; state.orderedUndo.clear(); }
 
       renderBarcodeQueue();
       updateAssignButton();
       updateSessionWidgets();
 
       syncFlow();
+      barcodeInput.value = "";
       setAssignStatus("Barcode queue cleared.");
+      barcodeInput.focus();
     });
 
     sortBarcodeInput.addEventListener("keydown", (event) => {

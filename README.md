@@ -135,22 +135,19 @@ Computer Science, Rice University<br>
 
 ### Ordered searching
 
-Turn on **Ordered searching**, scan the first barcode in the stack, and search
-for and assign that CD normally. Then scan the last barcode and assign its CD.
-The app automatically prepares the first barcode plus or minus one, depending on
-which direction leads toward the last barcode. No batch size or range entry is
-needed. Both endpoint CDs are already assigned and are skipped in the interior pass.
+Turn on **Ordered searching**, scan the first barcode in the stack, then scan
+its last barcode. The full inclusive range is queued in scan direction: 100 to
+130 queues 100, 101, …, 130; 100 to 70 queues 100, 99, …, 70.
 
-Return to the second CD. Suggested tiles follow original album ID order; use
-arrow keys to choose and Enter to assign. Each assignment advances the barcode
-automatically. Manual search stays available for misplaced CDs, and each confirmed
-interior album guides the next prediction. Barcode direction and ID direction can
-each run forward or backward independently.
+Start with the first CD and work down the stack. Search for each album, choose
+it, and press Enter to assign the next queued barcode automatically. Neither
+endpoint needs to be assigned in advance. For a single CD, scan its barcode twice.
+Numeric barcodes retain leading zeros and support large values exactly.
 
-After the interior CDs are done, scan the first barcode of another stack to
-continue, or uncheck **Ordered searching**. Toggling it clears the pending queue
-but keeps completed assignments. **Undo Last** restores the corresponding ordered
-step for assignments made in this active ordered session. A page reload resets
-the mode. External barcode matching remains available when ordered searching is off.
+After the stack is done, scan the first barcode of another stack to continue,
+or uncheck **Ordered searching** for stacks that need individual scans. Toggling
+clears pending scans but keeps completed assignments. **Undo Last** restores the
+undone barcode and remaining range in the active session. Reloading resets the
+mode. External barcode matching remains available when ordered searching is off.
 
 Run checks with `node --test test/ordered-search.test.js`.
