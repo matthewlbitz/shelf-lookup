@@ -23,8 +23,15 @@
     el('heading').textContent = `Column ${active.column} · Stack ${active.id.slice(-6)}`;
     el('progress').textContent = `${active.position} of ${active.count} CDs placed · Follow rows downward`;
     el('rows').replaceChildren();
-    active.scans.slice(active.position, active.position + 10).forEach((scan, i) => {
+    const group = active.scans.slice(active.position, active.position + 10);
+    const destination = scan => String(scan.album?.new_shelf || '').trim().toUpperCase();
+    group.forEach((scan, i) => {
       const row = document.createElement('div');
+      const label = destination(scan);
+      const previousSame = i > 0 && !!label && destination(group[i - 1]) === label;
+      const nextSame = i + 1 < group.length && !!label && destination(group[i + 1]) === label;
+      row.className = (previousSame || nextSame ? 'batch-repeat' : '')
+        + (previousSame ? ' repeat-continuation' : '') + (nextSame ? ' repeat-continues' : '');
       const number = document.createElement('span'); number.textContent = active.position + i + 1;
       const shelf = document.createElement('strong'); shelf.textContent = scan.album?.new_shelf || 'Set aside';
       const detail = document.createElement('span'); detail.textContent = [scan.album?.artist, scan.album?.title].filter(Boolean).join(' — ');

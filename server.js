@@ -571,6 +571,7 @@ const app = express();
 
 app.use(express.json({ limit: "5mb" }));
 require("./shared-stacks").installSharedStacks(app, db);
+require("./shared-stacks").installSharedStacks(app, db, true);
 // Database files include local catalog data and the online lookup cache.
 app.use((req, res, next) => {
   if (/\.(?:db|sqlite)(?:-|$)/i.test(req.path)) return res.sendStatus(404);

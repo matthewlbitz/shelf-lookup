@@ -5,13 +5,14 @@
   let scans = [], phase = 'scan', page = 0;
   let buckets = {}, bucketMode = true, activeBucket = null, suspended = null;
   let singleMode = false, singleScan = null;
-  let handoffs = {}, sending = false;
+  let handoffs = {}, sending = false, inboxReceipt = null;
   const storageKey = 'shelf-lookup-batch-v1';
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
     if (saved) {
       ({ scans, phase, page, buckets, bucketMode, activeBucket, suspended } = saved);
       handoffs = saved.handoffs || {};
+      inboxReceipt = saved.inboxReceipt || null;
       singleMode = !!saved.singleMode && phase === 'scan' && !scans.length;
     }
   } catch (_) { /* Storage may be unavailable. */ }
@@ -20,7 +21,7 @@
   const column = scan => String(scan.album?.new_shelf || '').trim().match(/^(\d+)\s*[A-Za-z]+$/)?.[1];
   const routing = () => bucketMode && !activeBucket;
   function save() {
-    try { localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs })); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt })); }
     catch (_) { el('sortStatus').textContent = 'Unable to save this session. Keep this page open while sorting.'; }
   }
   const pending = () => scans.some(scan => scan.pending);
@@ -135,7 +136,7 @@
     }
     // Persist the retry identity before sending so a lost response cannot duplicate a stack.
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs }));
+      localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt }));
     } catch (_) {
       el('handoffStatus').textContent = 'Browser storage is unavailable. Handoff was not sent.';
       return;
@@ -152,6 +153,71 @@
       el('handoffStatus').textContent = `${error.message} Keep this column stack separate until the handoff succeeds.`;
     } finally { sending = false; render(); }
   }
+  // Entries arrive in confirmation/placement order. The sorter reverses them
+  // once to follow the top of the newly built confirmed pile.
+  window.acceptAssignedStack = (entries, receipt = null) => {
+    if (phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
+      throw new Error('Finish the current sorting stack or pending handoff before handing over the confirmed stack.');
+    }
+    if (!entries.length || new Set(entries.map(scan => scan.barcode)).size !== entries.length) {
+      throw new Error('The confirmed stack is empty or contains duplicate barcodes.');
+    }
+    const imported = entries.map(scan => ({ barcode: scan.barcode, album: { ...scan.album }, pending: false }));
+    // Persist before accepting ownership so a failed save leaves the source intact.
+    localStorage.setItem(storageKey, JSON.stringify({ scans: imported, phase: 'sort', page: 0,
+      buckets, bucketMode: true, activeBucket: null, suspended: null, singleMode: false, handoffs, inboxReceipt: receipt }));
+    inboxReceipt = receipt;
+    scans = imported; phase = 'sort'; page = 0; bucketMode = true; singleMode = false;
+    render(); el('nextBatch').focus();
+  };
+  let inboxBusy = false;
+  async function inboxRequest(path, body) {
+    const response = await fetch('/api/column-stacks' + path, body ? {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    } : {});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not receive the stack. Retry.');
+    return data;
+  }
+  async function refreshInbox() {
+    if (inboxBusy) return;
+    inboxBusy = true;
+    try {
+      // Acknowledge only after the imported stack is durably saved locally.
+      if (inboxReceipt) {
+        await inboxRequest(`/${inboxReceipt.id}/progress`, { owner: inboxReceipt.owner, from: 0, position: inboxReceipt.count });
+        inboxReceipt = null; save();
+      }
+      const stacks = await inboxRequest('');
+      el('columnInbox').replaceChildren();
+      el('columnInboxStatus').textContent = stacks.length ? 'Choose the confirmed pile to receive for column sorting.' : 'No confirmed stacks waiting.';
+      stacks.forEach(stack => {
+        const button = document.createElement('button');
+        button.className = 'secondary';
+        button.textContent = `Receive stack ${stack.id.slice(-6)} · ${stack.count} CDs${stack.claimed ? ' · Claimed' : ''}`;
+        button.addEventListener('click', async () => {
+          if (inboxBusy) return;
+          if (phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
+            el('columnInboxStatus').textContent = 'Finish the current sorting stack before receiving another.'; return;
+          }
+          inboxBusy = true;
+          try {
+            let owner = localStorage.getItem('column-receiver-id');
+            if (!owner) { owner = crypto.randomUUID(); localStorage.setItem('column-receiver-id', owner); }
+            const claimed = await inboxRequest(`/${stack.id}/claim`, { owner });
+            if (claimed.position >= claimed.count) throw new Error('This stack was already received.');
+            // Claim supplies top-first order; acceptAssignedStack expects placement order.
+            window.acceptAssignedStack(claimed.scans.slice().reverse(), { id: stack.id, owner, count: claimed.count });
+          } catch (error) { el('columnInboxStatus').textContent = error.message; }
+          finally { inboxBusy = false; }
+          if (inboxReceipt) refreshInbox();
+        });
+        el('columnInbox').append(button);
+      });
+    } catch (error) { el('columnInboxStatus').textContent = error.message + ' Refresh incoming stacks to retry.'; }
+    finally { inboxBusy = false; }
+  }
+  el('refreshColumnInbox').addEventListener('click', refreshInbox);
   input.addEventListener('keydown' , async event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
@@ -225,6 +291,8 @@
     event.preventDefault();
     if (!event.repeat) next();
   });
+  el('sortTab').addEventListener('click', refreshInbox);
+  if (window.location?.hash === '#sort') refreshInbox();
   render();
   scans.filter(scan => scan.pending).forEach(lookup);
 })();

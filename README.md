@@ -226,3 +226,30 @@ with the catalog and should be included in your usual database backups.
 Repeated barcodes within the current scanned stack are ignored with a notice,
 including while a lookup is pending. Removing a scan lets you scan it again.
 The same barcode can be scanned in a later stack or in **One album at a time** mode.
+
+### Paired barcode scanning
+
+Turn on **Use external barcodes (KTRU → UPC/EAN per CD)**. This switches off
+first/last range inference and clears pending scans. In the first pass, scan each
+CD’s KTRU barcode followed by that same CD’s UPC/EAN, then move to the next CD.
+Use **Skip barcode** for CDs without an external barcode. Focus switches automatically.
+
+Click **Finish scanning — confirm albums** once every CD is paired. In the second
+pass, confirm and assign each match (or search manually), in reverse scanning
+order, starting with the last CD scanned (the top of the scanned pile). No albums are assigned during capture.
+
+Place each confirmed CD onto a new pile. Once confirmation is finished, click
+**Hand confirmed stack to column sort** to send that pile to the shared column
+sorter inbox without navigating away. On the column sorter, click **Refresh incoming
+confirmed stacks**, then **Receive stack** for the matching stack ID. Another tab
+or browser connected to the same server can receive it without rescanning.
+Keep skipped CDs separate. Column sorting follows the top of the confirmed pile
+(the reverse of confirmation order). Use the existing **Hand off column** buttons
+to send completed column piles to the shelf sorter. Finish an active sorting stack
+before importing another one. The pending confirmed pile is held in this page
+until handed off; keep the page open.
+
+Confirmed-stack handoffs use persistent retry IDs. If sending fails, keep the pile
+separate and retry. The column receiver saves the imported stack before acknowledging
+receipt; refresh the inbox to retry an interrupted acknowledgement. A claimed stack
+belongs to its receiving browser. The existing column-to-shelf handoff is unchanged.

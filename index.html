@@ -874,13 +874,15 @@
 
               <label class="inline-toggle" for="externalToggle">
                 <input id="externalToggle" type="checkbox" aria-controls="externalFields" />
-                <span>Use external barcodes</span>
+                <span>Use external barcodes (KTRU → UPC/EAN per CD)</span>
               </label>
               <div id="externalFields" hidden>
                 <div class="field" id="externalScanField">
                   <label for="externalInput">External UPC / EAN</label>
                   <input id="externalInput" autocomplete="off" inputmode="numeric" placeholder="Scan external barcode" disabled />
                   <div class="assign-actions">
+                    <button id="handoffAssigned" class="secondary" type="button" disabled>Hand confirmed stack to column sort</button>
+                    <button id="finishScanning" class="secondary" type="button" disabled>Finish scanning — confirm albums</button>
                     <button id="skipExternal" class="secondary" type="button" disabled>Skip barcode</button>
                   </div>
                 </div>
@@ -947,6 +949,9 @@
           <p id="bucketHint" class="hint" hidden>Place CDs on top of each column bucket in displayed order. Next confirms the displayed group was placed. To empty a bucket mid-stack, place the group and pause, then select a column below.</p>
           <p><a href="receive-stacks.html" target="_blank" rel="noopener">Receive shared stacks →</a></p>
           <p id="handoffStatus" role="status"></p>
+          <button id="refreshColumnInbox" class="secondary" type="button">Refresh incoming confirmed stacks</button>
+          <p id="columnInboxStatus" role="status"></p>
+          <div id="columnInbox" class="assign-actions"></div>
           <div id="bucketList" class="assign-actions"></div>
           <div id="batchScanFields">
             <div class="field">
@@ -1057,11 +1062,16 @@
       selectedIndex: -1,
       searchTimer: null,
       progress: [],
-      recentAssignments: [],
+      recentAssignments: [], confirmedStack: [],
       sessionAssigned: 0,
       unassignedOnly: true,
       phase: "manual", pairs: {}, externalIndex: 0, externalPending: [], awaitingDecision: false, busy: false, searchVersion: 0, proposal: false
     };
+
+    try {
+      const pendingHandoff = JSON.parse(localStorage.getItem('confirmed-handoff-pending') || 'null');
+      if (pendingHandoff) state.confirmedStack = pendingHandoff.scans;
+    } catch (_) { /* The send action reports unavailable storage. */ }
 
     const sidebarSections = ['sectionHistory', 'sectionSession', 'sectionShelfProgress', 'sectionBacklog', 'sectionCoverage'];
     let activeSidebar = null;
@@ -1358,7 +1368,7 @@
     function updateAssignButton() {
       const selectedAlbum = state.results[state.selectedIndex];
       assignButton.disabled =
-        state.busy || state.phase === "external" || state.barcodeQueue.length === 0 || !selectedAlbum;
+        state.busy || state.phase === "external" || (externalToggle.checked && state.phase === "manual") || state.barcodeQueue.length === 0 || !selectedAlbum;
     }
 
     function renderProgress() {
@@ -1528,7 +1538,7 @@
     }
 
     async function assignSelectedAlbum() {
-      if (state.busy || state.phase === "external") return;
+      if (state.busy || state.phase === "external" || (externalToggle.checked && state.phase === "manual")) return;
       const album = state.results[state.selectedIndex];
       const barcode = state.barcodeQueue[0];
 
@@ -1562,6 +1572,7 @@
         });
 
         setAssignStatus(`Assigned barcode ${barcode} to ${(data.album?.artist ?? data.artist)} - ${(data.album?.title ?? data.title)}. - Shelf ${(album.new_shelf ?? "--")}`, "success");        state.sessionAssigned += 1;
+        if (state.phase === "verify") state.confirmedStack.push({ barcode, album: data.album });
         state.recentAssignments.unshift({
           barcode,
           id: data.album.id,
@@ -1605,7 +1616,7 @@
           setAssignStatus(error.message || "Assignment failed.", "error");
         }
         searchInput.focus();
-      } finally { state.busy = false; syncFlow(); if (state.awaitingDecision) { if (state.proposal) assignButton.focus(); else rejectMatch.focus(); } else if (state.ordered && !state.barcodeQueue.length) barcodeInput.focus(); else searchInput.focus(); }
+      } finally { state.busy = false; syncFlow(); if (state.awaitingDecision) { if (state.proposal) assignButton.focus(); else rejectMatch.focus(); } else if ((state.ordered || externalToggle.checked) && !state.barcodeQueue.length) barcodeInput.focus(); else searchInput.focus(); }
     }
 
     async function undoLastAssignment() {
@@ -1614,6 +1625,7 @@
       try {
         const data = await fetchJson("/undo-last-assignment", { method: "POST" });
 
+        state.confirmedStack = state.confirmedStack.filter(scan => scan.barcode !== data.assignment.barcode);
         state.suggestionKey = null;
         if (state.ordered && state.orderedUndo.has(data.assignment.id)) {
           state.ordered = state.orderedUndo.get(data.assignment.id);
@@ -1718,17 +1730,19 @@
       renderOrderedStatus();
       refreshLikely();
       const external = state.phase === "external";
-      const current = state.barcodeQueue[external ? state.externalIndex : 0];
-      document.getElementById("phaseStatus").textContent = external
-        ? `EXTERNAL PASS ${state.externalIndex + 1}/${state.barcodeQueue.length} — internal ${current}. Last scanned → first scanned. Scan or skip, then move this album.`
-        : state.phase === "verify"
-          ? `VERIFY — internal ${current}. First scanned → last scanned. Check album, then Yes or No.`
-          : `Scan the internal stack first, then scan external barcodes starting with ${current || "the last internal barcode"}. Matches are verified after all external scans.`;
-      barcodeInput.disabled = state.busy || state.phase !== "manual";
-      const readyToScan = externalToggle.checked && state.phase === "manual" && state.barcodeQueue.length > 0;
+      document.getElementById("handoffAssigned").disabled = state.busy || state.barcodeQueue.length > 0 || !state.confirmedStack.length;
+      const pending = state.barcodeQueue.find(code => !state.pairs[code]);
+      const current = state.phase === "verify" ? state.barcodeQueue[0] : pending;
+      document.getElementById("phaseStatus").textContent = state.phase === "verify"
+        ? `Check the match for KTRU ${current}, then assign before moving to the next CD.`
+        : current ? `Scan UPC/EAN for this same CD (KTRU ${current}), or Skip barcode.`
+        : "Scan the next CD’s KTRU barcode, then its UPC/EAN. When the stack is scanned, click Finish scanning.";
+      barcodeInput.disabled = state.busy || state.phase !== "manual" || (externalToggle.checked && !!pending);
+      const readyToScan = externalToggle.checked && state.phase === "manual" && !!pending;
+      document.getElementById("finishScanning").disabled = state.busy || state.phase !== "manual" || !state.barcodeQueue.length || !!pending;
       externalInput.disabled = state.busy || !(external || readyToScan);
       skipExternal.disabled = externalInput.disabled;
-      externalToggle.disabled = state.busy || state.phase !== "manual" || !!state.ordered;
+      externalToggle.disabled = state.busy || state.phase !== "manual";
       document.getElementById("externalFields").hidden = !externalToggle.checked;
       document.getElementById("externalScanField").hidden = state.phase === "verify";
       document.getElementById("manualHint").hidden = externalToggle.checked;
@@ -1740,7 +1754,9 @@
       searchInput.disabled = state.busy || external;
       searchInput.parentElement.hidden = state.awaitingDecision || external;
       unassignedOnlyToggle.parentElement.hidden = state.awaitingDecision || external;
-      [clearButton, clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase !== "manual");
+      clearButton.disabled = state.busy || state.phase !== "manual";
+      [clearQueueButton, removeScanButton].forEach(b => b.disabled = state.busy || state.phase === "external");
+      removeScanButton.textContent = state.phase === "verify" ? "Remove current barcode" : "Remove last scanned";
       undoButton.disabled = state.busy || external;
       rejectMatch.hidden = !state.awaitingDecision;
       rejectMatch.disabled = state.busy;
@@ -1865,37 +1881,59 @@
       if (state.proposal) assignButton.focus(); else searchInput.focus();
     }
     externalToggle.addEventListener("change", () => {
-      syncFlow();
-      if (externalToggle.checked && state.barcodeQueue.length) externalInput.focus();
-      else barcodeInput.focus();
+      if (externalToggle.checked) {
+        // Pair capture starts with a fresh CD, never an inferred or reversed batch.
+        state.ordered = null; orderedToggle.checked = false;
+        state.orderedUndo.clear(); state.barcodeQueue = []; state.pairs = {};
+        invalidateResults(); barcodeInput.value = ""; externalInput.value = "";
+      }
+      syncFlow(); barcodeInput.focus();
     });
     async function pairExternal(skip = false) {
-      if (state.busy || !externalToggle.checked || state.phase === "verify" || !state.barcodeQueue.length) return;
+      if (state.busy || !externalToggle.checked || state.phase !== "manual" || !state.barcodeQueue.length) return;
       const code = externalInput.value.trim();
       if (!skip && !code) return;
-      if (state.phase === "manual") {
-        invalidateResults(); state.phase = "external"; state.pairs = {}; state.externalIndex = 0; state.externalPending = [];
-      }
-      if (state.externalIndex >= state.barcodeQueue.length) return;
       if (!skip && !/^(\d{8}|\d{12,14})$/.test(code.replace(/[\s-]/g, ""))) {
         setAssignStatus("Use an 8, 12, 13 or 14 digit UPC/EAN code, or Skip.", "warning"); return;
       }
-      const internal = state.barcodeQueue[state.externalIndex];
-      state.externalIndex++; externalInput.value = "";
-      const lookup = (skip ? Promise.resolve({ albums: [], skipped: true }) : fetchJson(`/external-lookup/${encodeURIComponent(code)}`))
-        .then(pair => { state.pairs[internal] = pair; })
-        .catch(error => { state.pairs[internal] = { albums: [], unavailable: true, error: error.message }; });
-      state.externalPending.push(lookup);
-      if (state.externalIndex === state.barcodeQueue.length) {
-        state.busy = true; syncFlow();
-        document.getElementById("phaseStatus").textContent = "All scans captured. Waiting for queued online lookups…";
-        await Promise.all(state.externalPending);
-        state.busy = false;
-        state.barcodeQueue.reverse(); state.phase = "verify";
-        showVerification();
-      } else { syncFlow(); externalInput.focus(); }
-      await lookup;
+      const internal = state.barcodeQueue.find(code => !state.pairs[code]);
+      if (!internal) return;
+      state.busy = true; invalidateResults(); syncFlow();
+      try {
+        state.pairs[internal] = skip ? { albums: [], skipped: true }
+          : await fetchJson(`/external-lookup/${encodeURIComponent(code)}`);
+      } catch (error) {
+        state.pairs[internal] = { albums: [], unavailable: true, error: error.message };
+      } finally {
+        externalInput.value = ""; state.busy = false;
+        syncFlow(); barcodeInput.focus();
+      }
     }
+    function finishScanning() {
+      if (state.busy || !externalToggle.checked || state.phase !== "manual" || !state.barcodeQueue.length
+          || state.barcodeQueue.some(code => !state.pairs[code])) return;
+      state.barcodeQueue.reverse();
+      state.phase = "verify";
+      showVerification();
+    }
+    document.getElementById("handoffAssigned").addEventListener("click", async () => {
+      if (state.busy || state.barcodeQueue.length || !state.confirmedStack.length) return;
+      state.busy = true; syncFlow();
+      try {
+        let transfer = JSON.parse(localStorage.getItem('confirmed-handoff-pending') || 'null');
+        if (!transfer) transfer = { id: crypto.randomUUID(), scans: state.confirmedStack.slice() };
+        localStorage.setItem('confirmed-handoff-pending', JSON.stringify(transfer));
+        await fetchJson('/api/column-stacks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(transfer)
+        });
+        localStorage.removeItem('confirmed-handoff-pending');
+        state.confirmedStack.splice(0, transfer.scans.length);
+        setAssignStatus(`Stack ${transfer.id.slice(-6)} sent to the column sorter. Give them this pile without changing its order.`, "success");
+      } catch (error) {
+        setAssignStatus(`${error.message} Keep the pile separate and retry the handoff.`, "warning");
+      } finally { state.busy = false; syncFlow(); }
+    });
+    document.getElementById("finishScanning").addEventListener("click", finishScanning);
     externalInput.addEventListener("keydown", e => {
       if (e.key === "Enter" && !e.repeat) { e.preventDefault(); pairExternal(); }
     });
@@ -1937,14 +1975,16 @@
           barcodeInput.value = "";
           return;
         }
+        if (externalToggle.checked && state.barcodeQueue.some(code => !state.pairs[code])) throw Error("Scan this CD’s UPC/EAN or Skip before scanning the next KTRU barcode.");
         if (state.barcodeQueue.includes(barcode)) throw Error("Barcode already queued.");
         const data = await fetchJson(`/check-barcode/${encodeURIComponent(barcode)}`);
         if (data.assigned) throw Error("Barcode already assigned.");
-        state.barcodeQueue.unshift(barcode);
+        if (externalToggle.checked) { delete state.pairs[barcode]; state.barcodeQueue.push(barcode); }
+        else state.barcodeQueue.unshift(barcode);
         barcodeInput.value = "";
         setAssignStatus(`Added ${barcode}.`);
       } catch (error) { setAssignStatus(error.message, "warning"); }
-      finally { state.busy = false; if (state.ordered) state.suggestionKey = null; syncFlow(); if (state.ordered && state.barcodeQueue.length) searchInput.focus(); else barcodeInput.focus(); }
+      finally { state.busy = false; if (state.ordered) state.suggestionKey = null; syncFlow(); if (externalToggle.checked && state.barcodeQueue.length) externalInput.focus(); else if (state.ordered && state.barcodeQueue.length) searchInput.focus(); else barcodeInput.focus(); }
     });
 
     searchInput.addEventListener("input", () => {
@@ -1997,10 +2037,11 @@
     undoButton.addEventListener("click", undoLastAssignment);
 
     removeScanButton.addEventListener("click", () => {
-      if (state.busy || state.phase !== "manual") return;
+      if (state.busy || state.phase === "external") return;
       if (!state.barcodeQueue.length && state.ordered?.stage !== "last") return;
       invalidateResults();
-      const removed = state.barcodeQueue.shift() || state.ordered.first;
+      const removed = (externalToggle.checked && state.phase === "manual" ? state.barcodeQueue.pop() : state.barcodeQueue.shift()) || state.ordered.first;
+      delete state.pairs[removed];
       if (state.ordered) {
         state.ordered = state.barcodeQueue.length
           ? { ...state.ordered, current: state.barcodeQueue[0] }
@@ -2009,6 +2050,10 @@
         state.orderedUndo.clear();
       }
       barcodeInput.value = "";
+      if (state.phase === "verify") {
+        showVerification();
+        return;
+      }
       syncFlow();
       setAssignStatus(`Removed barcode ${removed} from the queue.`);
       if (state.barcodeQueue.length) searchInput.focus();
@@ -2016,10 +2061,13 @@
     });
 
       clearQueueButton.addEventListener("click", () => {
-      if (state.busy || state.phase !== "manual") return;
+      if (state.busy || state.phase === "external") return;
       invalidateResults();
 
       state.barcodeQueue = [];
+      state.pairs = {}; state.phase = "manual";
+      state.awaitingDecision = false; state.proposal = false;
+      externalInput.value = "";
       if (state.ordered) { state.ordered = { stage: "first" }; state.orderedUndo.clear(); }
 
       renderBarcodeQueue();

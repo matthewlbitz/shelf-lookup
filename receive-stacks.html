@@ -71,7 +71,11 @@
     button:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 4px; }
     button:disabled { opacity: 0.55; cursor: not-allowed; }
     #rows { border: 1px solid var(--line-soft); border-radius: 14px; background: #080808; overflow: hidden; }
-    #rows > div { display: grid; grid-template-columns: 40px minmax(110px, 1fr) minmax(0, 2fr); align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line-soft); }
+    #rows > div { display: grid; grid-template-columns: 40px minmax(110px, 1fr) minmax(0, 2fr); align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line-soft); border-left: 4px solid transparent; }
+    #rows > .batch-repeat { border-left-color: var(--accent); background: rgba(218, 165, 32, 0.09); }
+    #rows > .repeat-continues { border-bottom-color: transparent; }
+    #rows > .batch-repeat:not(.repeat-continuation) { border-top-left-radius: 10px; }
+    #rows > .batch-repeat:not(.repeat-continues) { border-bottom-left-radius: 10px; }
     #rows > div:last-child { border-bottom: 0; }
     #rows > div > span:first-child { color: var(--muted); font-size: 14px; }
     #rows strong { color: var(--accent-strong); font-size: clamp(24px, 3vw, 38px); overflow-wrap: anywhere; }
