@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Receive stacks · KTRU</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(18, 18, 18, 0.96);
+      --line: #7a5b00;
+      --line-soft: rgba(218, 165, 32, 0.28);
+      --text: #f5d77a;
+      --muted: #c8a94b;
+      --accent: #daa520;
+      --accent-strong: #f2c94c;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: #000;
+      color: var(--text);
+      font-family: "Courier New", Courier, monospace;
+    }
+    .shell { max-width: 1200px; padding: 24px 24px 24px 18px; }
+    .topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 0 18px rgba(218, 165, 32, 0.18); }
+    h2 { margin: 0; font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase; overflow-wrap: anywhere; }
+    .back-link {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #111;
+      color: var(--text);
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(218, 165, 32, 0.04), transparent 18%), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(218, 165, 32, 0.06);
+    }
+    .kicker { margin: 0 0 10px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.16em; }
+    .hint, #progress { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .hint { margin: 0; max-width: 780px; }
+    #status { min-height: 28px; margin: 18px 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+    #stacks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+    button {
+      font: inherit;
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #f0bf42, var(--accent));
+      color: #121212;
+      padding: 12px 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #stacks button, #back { background: #111; color: var(--text); border-color: var(--line); }
+    #stacks button { text-align: left; padding: 18px; }
+    button:hover:not(:disabled), .back-link:hover { border-color: var(--accent-strong); box-shadow: 0 0 18px rgba(218, 165, 32, 0.18); }
+    button:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 4px; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    #rows { border: 1px solid var(--line-soft); border-radius: 14px; background: #080808; overflow: hidden; }
+    #rows > div { display: grid; grid-template-columns: 40px minmax(110px, 1fr) minmax(0, 2fr); align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line-soft); }
+    #rows > div:last-child { border-bottom: 0; }
+    #rows > div > span:first-child { color: var(--muted); font-size: 14px; }
+    #rows strong { color: var(--accent-strong); font-size: clamp(24px, 3vw, 38px); overflow-wrap: anywhere; }
+    #rows > div > span:last-child { color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+    small { display: block; margin-top: 4px; font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    @media (max-width: 600px) {
+      .shell { padding: 16px 12px; }
+      h1 { font-size: 23px; }
+      .panel { padding: 16px; }
+      #rows > div { grid-template-columns: 24px 75px minmax(0, 1fr); gap: 8px; padding: 10px 8px; }
+      .actions button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <h1>Receive shared stacks</h1>
+      <a class="back-link" href="/">← Scanning and columns</a>
+    </header>
+    <div class="panel">
+      <p class="kicker">Column stacks → shelves</p>
+      <p class="hint">Pick up the matching physical stack. Keep it in order, then sort from the top down. This page checks for new stacks automatically.</p>
+      <p id="status" role="status"></p>
+      <div id="stacks"></div>
+      <section id="work" hidden aria-labelledby="heading">
+        <h2 id="heading"></h2>
+        <p id="progress"></p>
+        <div id="rows"></div>
+        <div class="actions">
+          <button id="next">Group placed — Next 10 (Enter)</button>
+          <button id="back">Back to stacks</button>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="receive-stacks.js"></script>
+</body>
+</html>

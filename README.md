@@ -151,3 +151,78 @@ undone barcode and remaining range in the active session. Reloading resets the
 mode. External barcode matching remains available when ordered searching is off.
 
 Run checks with `node --test test/ordered-search.test.js`.
+
+### Batch sorting
+
+In **Sort**, scan every CD in a stack, placing each scanned CD on top of the
+scanned stack. Select **Start sorting** to see destinations in reverse scan
+order, ten CDs at a time. Follow the rows downward, then press **Enter** or
+**Next 10**. The last group can contain fewer than ten CDs. Press **Enter** on the final group to finish the stack and immediately start
+scanning the next stack. **Previous 10** lets you revisit a group.
+Unmatched barcodes and albums without a shelf retain their position and show
+**Set aside**. Use **Remove last scan** to correct a scan while scanning, and
+remove that physical CD from the scanned stack too. Batch progress is saved in this browser.
+
+Run workflow checks with `node --test test/*.test.js`.
+
+### Column bucket sorting
+
+Sort uses **columns-first batch sorting** by default. Scan a
+stack as usual; sorting shows column numbers in groups of ten. Place each CD on
+top of its column bucket in row order. **Next 10** confirms that the displayed
+group was physically placed and saves its order in the buckets.
+
+Select **Group placed — pause for buckets** to pause after placing a group.
+Choose **Sort column …** to empty a bucket: full shelf labels appear in reverse
+placement order, ten at a time, without rescanning. Finish the bucket and select
+**Resume stack** to continue. Buckets can also be selected while scanning;
+the scanned source stack is retained. Bucket counts and progress persist across
+reloads in the same browser. Keep the physical stacks in order and use one tab
+for the sorting session. Unknown destinations remain **Set aside** and are not
+added to a column bucket. Previous-group navigation is available only in normal
+sorting, since advancing a bucket group records physical placements.
+
+### One album at a time
+
+Enable **One album at a time** in Sort to scan or type a barcode and immediately
+see the album and its full shelf location. Nothing is queued or added to column
+buckets. Turn it off to return to batch sorting. Switch modes between stacks;
+the preference is remembered in this browser.
+
+### Two computers on the same Wi-Fi
+
+Run `npm start` on the computer with your catalog. The terminal prints a
+**Same Wi-Fi** address and a **Receive stacks** address. Your partner opens the
+Receive stacks address in her browser; she does not need Node, Git, or a copy
+of the database. Keep the host computer awake and connected. If the address
+changes after reconnecting, use the newly printed address. Allow Node through
+the host firewall if prompted. Some guest/station networks block communication
+between devices; those require a network that permits local connections.
+
+On the scanning computer, use the default columns-first batch sorting. Confirm
+placed groups as usual. Between stacks, or after **Group placed — pause for
+buckets**, select **Hand off column** beside a column bucket. Give your partner
+that exact physical stack, keeping its top and bottom unchanged. Both screens
+show a matching stack ID. Once sent, start a separate physical bucket for any
+more CDs in that column.
+
+On **Receive shared stacks**, select the matching stack and follow the full
+shelf destinations from the top down. Confirm each placed group with the button
+or Enter. New stacks appear automatically, and completed groups are saved in
+the host's SQLite database. Returning to the list or reloading preserves progress;
+use the same receiving browser to resume claimed stacks. Use one receiving tab.
+
+If a handoff fails, keep the column separate and use **Retry handoff** before
+continuing to scan. Retrying does not create another copy. If confirming a shelf
+group fails after you physically placed it, retry the button without placing the
+same CDs again. Keep browser storage: it holds the sender's pending handoff ID
+and the receiver's claim identity. Unsent scanning progress remains in the
+scanning browser. The host must be running for handoffs or progress updates.
+
+The shared app is intended for trusted local Wi-Fi; it has no login. Do not
+forward its port onto the internet. Shared stack records are stored automatically
+with the catalog and should be included in your usual database backups.
+
+Repeated barcodes within the current scanned stack are ignored with a notice,
+including while a lookup is pending. Removing a scan lets you scan it again.
+The same barcode can be scanned in a later stack or in **One album at a time** mode.

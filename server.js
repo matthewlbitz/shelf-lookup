@@ -569,7 +569,8 @@ const progressStmt = quotedNewShelfColumn
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
+require("./shared-stacks").installSharedStacks(app, db);
 // Database files include local catalog data and the online lookup cache.
 app.use((req, res, next) => {
   if (/\.(?:db|sqlite)(?:-|$)/i.test(req.path)) return res.sendStatus(404);
@@ -959,6 +960,12 @@ module.exports = { app, db };
 
 if (require.main === module) app.listen(PORT, () => {
   console.log(`Vinyl shelf app running at http://localhost:${PORT}`);
+  for (const addresses of Object.values(require("node:os").networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family === "IPv4" && !address.internal)
+        console.log(`Same Wi-Fi: http://${address.address}:${PORT} · Receive stacks: http://${address.address}:${PORT}/receive-stacks.html`);
+    }
+  }
   console.log(`Database: ${DB_PATH}`);
   console.log(`Album table: ${schema.tableName}`);
 });
