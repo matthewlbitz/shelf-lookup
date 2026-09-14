@@ -289,3 +289,27 @@ Confirmed-stack handoffs use persistent retry IDs. If sending fails, keep the pi
 separate and retry. The column receiver saves the imported stack before acknowledging
 receipt; refresh the inbox to retry an interrupted acknowledgement. A claimed stack
 belongs to its receiving browser. The existing column-to-shelf handoff is unchanged.
+
+
+### Saving scanned stack bundles
+
+On Sort, scan one physical stack, placing each scanned CD on top, then choose
+**Save stack bundle**. Repeat for additional stacks. Open **Stack bundles · sort
+into columns**, refresh, and select the six-character bundle label matching the
+physical pile. Scanning 1, 2, 3, 4, 5 displays 5 first when that bundle is opened.
+These bundles use the same Wi-Fi host as assignment handoffs and column-to-shelf
+bundles.
+
+**Previous 10** reopens a page during column or shelf sorting. For column sorting,
+restore the reopened group's CDs to their original top-first order before placing
+them again; the app rolls back that group's bucket counts. Going back stops at a
+handoff or bucket-draining boundary, since those CDs may already be with another
+sorter. Finish closes the stack, so check the final page before confirming it.
+
+Shared bundles are persistent rows in `masterAlbums.db`:
+`shared_column_stacks` for stacks going into columns and `shared_sort_stacks`
+for columns going onto shelves. Completed rows remain stored but leave the inbox.
+The host computer and Node server must be running and reachable to fetch bundles;
+this is not cloud storage or peer replication. Once a column bundle is received
+for sorting, its working state is saved in that receiving browser's local storage.
+Local unsent scans and column buckets are also browser-local, not shared.

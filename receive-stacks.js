@@ -40,6 +40,7 @@
     });
     el('next').textContent = active.position + 10 >= active.count ? 'Group placed — Finish stack (Enter)' : 'Group placed — Next 10 (Enter)';
     el('next').disabled = busy;
+    el('previous').disabled = busy || active.position === 0;
     el('back').disabled = busy;
   }
   async function refresh() {
@@ -67,20 +68,21 @@
     } catch (error) { el('status').textContent = `Connection unavailable. ${error.message}`; }
     finally { busy = false; }
   }
-  async function next() {
+  async function next(previous = false) {
     if (!active || busy) return;
     busy = true; draw();
     try {
       const result = await request(`/api/shared-stacks/${active.id}/progress`, {
-        owner, from: active.position, position: Math.min(active.position + 10, active.count)
+        owner, from: active.position, position: previous ? active.position - 10 : Math.min(active.position + 10, active.count)
       });
       active.position = result.position;
       if (active.position === active.count) { active = null; el('status').textContent = 'Stack finished.'; }
-      else el('status').textContent = 'Progress saved. Place the next group.';
+      else el('status').textContent = previous ? 'Previous group reopened. Check or correct its placement, then confirm it again.' : 'Progress saved. Place the next group.';
     } catch (error) { el('status').textContent = `${error.message} If you already placed this group, retry the button without placing it again.`; }
     finally { busy = false; draw(); if (!active) refresh(); }
   }
-  el('next').addEventListener('click', next);
+  el('next').addEventListener('click', () => next());
+  el('previous').addEventListener('click', () => { if (active?.position >= 10) next(true); });
   el('back').addEventListener('click', () => { if (busy) return; active = null; draw(); refresh(); });
   window.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.repeat || !active || (event.target.closest('button,a,input') && event.target !== el('next'))) return;

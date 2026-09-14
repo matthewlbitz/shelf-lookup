@@ -5,7 +5,7 @@
   let scans = [], phase = 'scan', page = 0;
   let buckets = {}, bucketMode = true, activeBucket = null, suspended = null;
   let singleMode = false, singleScan = null;
-  let handoffs = {}, sending = false, inboxReceipt = null;
+  let handoffs = {}, sending = false, inboxReceipt = null, stackDraft = null, minPage = 0;
   const storageKey = 'shelf-lookup-batch-v1';
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
@@ -13,6 +13,7 @@
       ({ scans, phase, page, buckets, bucketMode, activeBucket, suspended } = saved);
       handoffs = saved.handoffs || {};
       inboxReceipt = saved.inboxReceipt || null;
+      stackDraft = saved.stackDraft || null; minPage = saved.minPage || 0;
       singleMode = !!saved.singleMode && phase === 'scan' && !scans.length;
     }
   } catch (_) { /* Storage may be unavailable. */ }
@@ -21,7 +22,7 @@
   const column = scan => String(scan.album?.new_shelf || '').trim().match(/^(\d+)\s*[A-Za-z]+$/)?.[1];
   const routing = () => bucketMode && !activeBucket;
   function save() {
-    try { localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt })); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt, stackDraft, minPage })); }
     catch (_) { el('sortStatus').textContent = 'Unable to save this session. Keep this page open while sorting.'; }
   }
   const pending = () => scans.some(scan => scan.pending);
@@ -30,7 +31,7 @@
   function render() {
     save();
     const scanning = phase === 'scan';
-    const transferPending = Object.keys(handoffs).length > 0;
+    const transferPending = Object.keys(handoffs).length > 0 || !!stackDraft;
     el('singleSortToggle').checked = singleMode;
     el('singleSortToggle').disabled = !scanning || scans.length > 0;
     el('scanStackHint').hidden = singleMode;
@@ -52,8 +53,8 @@
       button.disabled = transferPending || phase === 'sort' || !!activeBucket || pending();
       button.addEventListener('click', () => {
         if (Object.keys(handoffs).length || phase === 'sort' || activeBucket || pending()) return;
-        suspended = { scans, phase, page };
-        scans = buckets[key].slice(); activeBucket = key; page = 0; phase = 'sort';
+        suspended = { scans, phase, page, minPage: page };
+        scans = buckets[key].slice(); activeBucket = key; page = 0; minPage = 0; phase = 'sort';
         render(); el('nextBatch').focus();
       });
       row.append(button);
@@ -72,9 +73,12 @@
     el('startBatch').hidden = singleMode || !scanning;
     el('startBatch').disabled = !scans.length || pending() || transferPending;
     el('removeBatchScan').hidden = singleMode || !scanning;
-    el('removeBatchScan').disabled = !scans.length;
-    el('previousBatch').hidden = phase !== 'sort' || bucketMode || !!activeBucket;
-    el('previousBatch').disabled = page === 0;
+    el('removeBatchScan').disabled = !scans.length || transferPending;
+    el('saveStackBundle').hidden = singleMode || !scanning;
+    el('saveStackBundle').disabled = sending || !scans.length || pending();
+    el('saveStackBundle').textContent = stackDraft ? 'Retry save bundle' : 'Save stack bundle';
+    el('previousBatch').hidden = phase !== 'sort';
+    el('previousBatch').disabled = page <= minPage;
     el('nextBatch').hidden = phase !== 'sort';
     const start = page * 10;
     el('nextBatch').textContent = start + 10 >= scans.length ? 'Finish stack (Enter)' : 'Next 10 (Enter)';
@@ -141,7 +145,7 @@
     }
     // Persist the retry identity before sending so a lost response cannot duplicate a stack.
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt }));
+      localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt, stackDraft, minPage }));
     } catch (_) {
       el('handoffStatus').textContent = 'Browser storage is unavailable. Handoff was not sent.';
       return;
@@ -152,26 +156,43 @@
       if (!response.ok) throw new Error('Handoff failed. Keep the stack in order and retry.');
       const sent = handoffs[key];
       buckets[key].splice(0, sent.scans.length);
+      minPage = page;
       delete handoffs[key];
       el('handoffStatus').textContent = `Column ${key} sent · Stack ${sent.id.slice(-6)}. Give your partner this stack without changing its order.`;
     } catch (error) {
       el('handoffStatus').textContent = `${error.message} Keep this column stack separate until the handoff succeeds.`;
     } finally { sending = false; render(); }
   }
+  el('saveStackBundle').addEventListener('click', async () => {
+    if (sending || phase !== 'scan' || !scans.length || pending() || Object.keys(handoffs).length) return;
+    stackDraft ||= { id: Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join(''),
+      scans: scans.map(scan => ({ ...scan, album: scan.album || {} })) };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ scans, phase, page, buckets, bucketMode, activeBucket, suspended, singleMode, handoffs, inboxReceipt, stackDraft, minPage }));
+    } catch (_) { el('sortStatus').textContent = 'Browser storage unavailable. Bundle was not sent.'; return; }
+    sending = true; render();
+    try {
+      const saved = await inboxRequest('', stackDraft);
+      scans = []; stackDraft = null;
+      el('sortStatus').textContent = `Saved stack bundle ${saved.id.slice(-6)}. Keep its order; select it in Stack bundles to sort into columns.`;
+    } catch (error) { el('sortStatus').textContent = error.message + ' Retry save bundle.'; }
+    finally { sending = false; render(); }
+    refreshInbox();
+  });
   // Entries arrive in confirmation/placement order. The sorter reverses them
   // once to follow the top of the newly built confirmed pile.
   window.acceptAssignedStack = (entries, receipt = null) => {
-    if (phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
+    if (stackDraft || phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
       throw new Error('Finish the current sorting stack or pending handoff before handing over the confirmed stack.');
     }
     if (!entries.length || new Set(entries.map(scan => scan.barcode)).size !== entries.length) {
       throw new Error('The confirmed stack is empty or contains duplicate barcodes.');
     }
-    const imported = entries.map(scan => ({ barcode: scan.barcode, album: { ...scan.album }, pending: false }));
+    const imported = entries.map(scan => ({ barcode: scan.barcode, album: { ...scan.album }, error: scan.error, pending: false }));
     // Persist before accepting ownership so a failed save leaves the source intact.
     localStorage.setItem(storageKey, JSON.stringify({ scans: imported, phase: 'sort', page: 0,
-      buckets, bucketMode: true, activeBucket: null, suspended: null, singleMode: false, handoffs, inboxReceipt: receipt }));
-    inboxReceipt = receipt;
+      buckets, bucketMode: true, activeBucket: null, suspended: null, singleMode: false, handoffs, inboxReceipt: receipt, minPage: 0 }));
+    inboxReceipt = receipt; minPage = 0;
     scans = imported; phase = 'sort'; page = 0; bucketMode = true; singleMode = false;
     render(); el('nextBatch').focus();
   };
@@ -202,7 +223,7 @@
         button.textContent = `Receive stack ${stack.id.slice(-6)} · ${stack.count} CDs${stack.claimed ? ' · Claimed' : ''}`;
         button.addEventListener('click', async () => {
           if (inboxBusy) return;
-          if (phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
+          if (stackDraft || phase !== 'scan' || scans.length || activeBucket || suspended || sending || Object.keys(handoffs).length) {
             el('columnInboxStatus').textContent = 'Finish the current sorting stack before receiving another.'; return;
           }
           inboxBusy = true;
@@ -226,7 +247,7 @@
   input.addEventListener('keydown' , async event => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    if (event.repeat || Object.keys(handoffs).length || phase !== 'scan') return;
+    if (event.repeat || stackDraft || Object.keys(handoffs).length || phase !== 'scan') return;
     const barcode = input.value.trim();
     if (!barcode) return;
     if (!singleMode && scans.some(scan => scan.barcode === barcode)) {
@@ -256,12 +277,12 @@
     singleScan = null; input.value = ''; render(); input.focus();
   });
   el('removeBatchScan').addEventListener('click', () => {
-    if (phase !== 'scan') return;
+    if (phase !== 'scan' || stackDraft) return;
     scans.pop(); render(); input.focus();
   });
   el('startBatch').addEventListener('click', () => {
-    if (Object.keys(handoffs).length || phase !== 'scan' || !scans.length || pending()) return;
-    phase = 'sort'; page = 0; render(); el('nextBatch').focus();
+    if (stackDraft || Object.keys(handoffs).length || phase !== 'scan' || !scans.length || pending()) return;
+    phase = 'sort'; page = 0; minPage = 0; render(); el('nextBatch').focus();
   });
   function next(pause = false) {
     if (phase !== 'sort') return;
@@ -273,9 +294,9 @@
     });
     if ((page + 1) * 10 >= scans.length) {
       if (activeBucket) {
-        ({ scans, page, phase } = suspended);
+        ({ scans, page, phase, minPage } = suspended);
         activeBucket = null; suspended = null;
-      } else { scans = []; page = 0; phase = 'scan'; bucketMode = true; }
+      } else { scans = []; page = 0; minPage = 0; phase = 'scan'; bucketMode = true; }
     } else { page++; if (pause) phase = 'paused'; }
     render();
     (phase === 'scan' ? input : el(phase === 'paused' ? 'resumeBatch' : 'nextBatch')).focus();
@@ -287,7 +308,16 @@
     phase = 'sort'; render(); el('nextBatch').focus();
   });
   el('previousBatch').addEventListener('click', () => {
-    if (phase === 'sort' && !bucketMode && !activeBucket) page = Math.max(0, page - 1);
+    if (phase !== 'sort' || page <= minPage) return;
+    const group = scans.slice().reverse().slice((page - 1) * 10, page * 10);
+    if (activeBucket) buckets[activeBucket].push(...group.slice().reverse());
+    else if (routing()) {
+      const counts = {};
+      group.forEach(scan => { const key = column(scan); if (key) counts[key] = (counts[key] || 0) + 1; });
+      Object.entries(counts).forEach(([key, count]) => buckets[key].splice(-count));
+    }
+    page--;
+    el('sortStatus').textContent = 'Previous group reopened. Restore those CDs to their original top-first order before placing them again.';
     render();
   });
   window.addEventListener('keydown', event => {

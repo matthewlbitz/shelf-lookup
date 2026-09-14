@@ -49,7 +49,7 @@ function installSharedStacks(app, db, columnInbox = false) {
     if (!row) return res.status(404).json({ error: 'Stack not found.' });
     if (!validId(owner) || row.owner !== owner) return res.status(409).json({ error: 'Claim this stack first.' });
     const count = JSON.parse(row.scans).length;
-    if (!Number.isInteger(from) || from < 0 || from >= count || position !== (columnInbox ? count : Math.min(from + 10, count)))
+    if (!Number.isInteger(from) || from < 0 || from >= count || !(position === (columnInbox ? count : Math.min(from + 10, count)) || (!columnInbox && from % 10 === 0 && from >= 10 && position === from - 10)))
       return res.status(400).json({ error: 'Invalid progress.' });
     if (row.position !== from && row.position !== position)
       return res.status(409).json({ error: 'Progress changed. Reopen the stack to continue.' });
