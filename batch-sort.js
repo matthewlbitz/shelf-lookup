@@ -44,8 +44,10 @@
     const list = el('bucketList');
     list.replaceChildren();
     Object.keys(buckets).filter(key => buckets[key].length).sort((a,b) => Number(a)-Number(b)).forEach(key => {
+      const row = document.createElement('div');
+      row.className = 'column-stack';
       const button = document.createElement('button');
-      button.className = 'secondary';
+      button.className = 'secondary column-stack-open';
       button.textContent = `Sort column ${key} · ${buckets[key].length} CDs`;
       button.disabled = transferPending || phase === 'sort' || !!activeBucket || pending();
       button.addEventListener('click', () => {
@@ -54,13 +56,16 @@
         scans = buckets[key].slice(); activeBucket = key; page = 0; phase = 'sort';
         render(); el('nextBatch').focus();
       });
-      list.append(button);
+      row.append(button);
       const handoff = document.createElement('button');
-      handoff.className = 'secondary';
-      handoff.textContent = `${handoffs[key] ? 'Retry handoff' : 'Hand off column'} ${key}`;
+      handoff.className = 'secondary column-stack-send';
+      handoff.textContent = handoffs[key] ? 'Retry send' : 'Send';
+      handoff.ariaLabel = `Send column ${key} to shelf sorter`;
+      handoff.title = `Send column ${key} to shelf sorter`;
       handoff.disabled = sending || phase === 'sort' || !!activeBucket || pending();
       handoff.addEventListener('click', () => sendBucket(key));
-      list.append(handoff);
+      row.append(handoff);
+      list.append(row);
     });
     el('batchScanFields').hidden = !scanning;
     input.disabled = !scanning || transferPending;

@@ -4,6 +4,42 @@ KTRU Shelf Lookup is a local web application for organizing and navigating KTRU 
 
 The current development database contains more than 19,000 album records. The application supports barcode assignment and lookup, collection-progress tracking, and normalization of artist names for consistent physical sorting.
 
+## Guided stack workflow
+
+The home page opens the previous Assign / Sort workflow. The experimental
+**Library stacks** workflow remains available at `/workflow.html`, using the
+existing black-and-gold Courier styling. Choose a starting point: labels, assignment, columns, or shelves.
+Create separate saved stacks for the UPC and no-UPC piles, and write the stack
+label on a slip kept with each physical pile.
+
+- **No UPC, labels in order:** scan the first and last KTRU labels; keep the stack
+  in place and assign from the first CD.
+- **With UPC:** scan each KTRU label and then that CD’s UPC/EAN. Both scans are
+  saved independently. Confirm later, starting at the top of the scanned pile.
+- **Already assigned:** scan KTRU labels once to begin column or shelf sorting.
+- **Column sorting:** place the displayed CD onto its column pile. Finishing
+  creates a saved stack for each column, in physical shelf-sorting order.
+- **Shelf sorting:** place each displayed CD onto its shelf and confirm placement.
+
+Every step is stored in `masterAlbums.db`, including barcode pairs, assignment
+progress, physical order, and column piles. Assignment and workflow advancement
+are one database transaction. Retries have stable operation IDs; stale changes
+are rejected. **Save & leave for a partner** releases a stack. Another operator
+can resume it, or deliberately take over a stack after checking with its owner.
+Keep the source pile and any partially filled column piles together when pausing.
+
+The server can be restarted without losing saved work. Local catalog work does
+not require internet, but other devices need a local network connection to the
+server. Fresh external UPC lookups require internet; scans remain saved if lookup
+is unavailable. Work while completely disconnected from the server is not yet
+supported: the page retains the pending save for retry and asks you to stop moving
+CDs until reconnected. Back up the database file to protect all saved work.
+
+Existing browser queues and shared handoffs are available under **Existing tools**
+(`/index.html`). Finish existing piles there; they are not automatically migrated
+into the new stack system. New column piles use the guided workflow’s shared home
+screen rather than the older handoff inboxes.
+
 ## Highlights
 
 - Search albums by artist or title

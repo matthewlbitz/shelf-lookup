@@ -842,6 +842,14 @@
       }
 
     }
+    .column-inbox { margin: 16px 0; color: var(--muted); }
+    .column-inbox summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
+    .column-inbox[open] summary { margin-bottom: 12px; }
+    .column-stacks { display: grid; gap: 8px; margin: 16px 0; }
+    .column-stack { display: flex; align-items: stretch; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; }
+    .column-stack button.secondary { border: 0; border-radius: 0; margin: 0; }
+    .column-stack .column-stack-open { flex: 1; min-width: 0; text-align: left; }
+    .column-stack .column-stack-send { width: auto; flex: 0 0 auto; border-left: 1px solid var(--line-soft) !important; padding-left: 18px; padding-right: 18px; }
   </style>
 </head>
 <body>
@@ -949,10 +957,13 @@
           <p id="bucketHint" class="hint" hidden>Place CDs on top of each column bucket in displayed order. Next confirms the displayed group was placed. To empty a bucket mid-stack, place the group and pause, then select a column below.</p>
           <p><a href="receive-stacks.html" target="_blank" rel="noopener">Receive shared stacks →</a></p>
           <p id="handoffStatus" role="status"></p>
-          <button id="refreshColumnInbox" class="secondary" type="button">Refresh incoming confirmed stacks</button>
-          <p id="columnInboxStatus" role="status"></p>
-          <div id="columnInbox" class="assign-actions"></div>
-          <div id="bucketList" class="assign-actions"></div>
+          <details class="column-inbox">
+            <summary>Incoming stacks</summary>
+            <button id="refreshColumnInbox" class="secondary" type="button">Refresh incoming stacks</button>
+            <p id="columnInboxStatus" role="status"></p>
+            <div id="columnInbox" class="assign-actions"></div>
+          </details>
+          <div id="bucketList" class="column-stacks"></div>
           <div id="batchScanFields">
             <div class="field">
               <label for="sortBarcodeInput" id="sortInputLabel">Scan this stack</label>

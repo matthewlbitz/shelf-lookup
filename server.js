@@ -577,6 +577,19 @@ app.use((req, res, next) => {
   if (/\.(?:db|sqlite)(?:-|$)/i.test(req.path)) return res.sendStatus(404);
   next();
 });
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+require('./workflow-store').installWorkflow(app, db, {
+  lookup: barcode => lookupByBarcodeStmt.get(barcode),
+  assign: (barcode, albumId) => {
+    const album = lookupByIdStmt.get(albumId);
+    if (!album) throw new Error('Album not found.');
+    if (album.barcode || lookupBarcodeOwnerStmt.get(barcode)) throw new Error('Album or barcode is already assigned. Refresh and check this CD.');
+    const assignedAt = new Date().toISOString();
+    assignStmt.run({ barcode, albumId, assignedAt });
+    historyInsertStmt.run({ albumId, barcode, assignedAt });
+    return { ...album, barcode, assigned_at: assignedAt };
+  }
+});
 app.use(express.static(__dirname));
 
 app.get("/artist-sorter", (req, res) => {
