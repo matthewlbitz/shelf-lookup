@@ -313,3 +313,61 @@ The host computer and Node server must be running and reachable to fetch bundles
 this is not cloud storage or peer replication. Once a column bundle is received
 for sorting, its working state is saved in that receiving browser's local storage.
 Local unsent scans and column buckets are also browser-local, not shared.
+
+### MusicBrainz artist resolver
+
+`resolve-artists.js` is a separate batch tool; the server never makes these
+lookups at startup. Requires Node 20+ and the existing `artist_sort` column.
+Start with a small read-only preview:
+
+```bash
+node resolve-artists.js --dry-run --limit 10
+node resolve-artists.js --dry-run --artist 'Duke Ellington'
+```
+
+The default is a dry run of 10 uncached unresolved artists. Dry runs do not
+create tables, cache lookups, or change album rows. To save a small batch after
+reviewing the preview, back up your database, then run:
+
+```bash
+node resolve-artists.js --apply --limit 10
+```
+
+Use `--db PATH` or `DB_PATH` for a test copy. `--all` explicitly selects the
+entire pending queue (`node resolve-artists.js --apply --all`). Run only one
+resolver at a time per public IP address. Requests are sequential, at least
+1.1 seconds apart, with a project-identifying User-Agent, 30-second timeout,
+and bounded retries honoring Retry-After for throttling/server errors.
+`MUSICBRAINZ_USER_AGENT` can override the default with your own app/contact
+identifier. Existing `.env` settings are loaded as in the server.
+See [MusicBrainz rate limits](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting).
+
+Every successful lookup is cached under the **original** artist string as
+`matched`, `review`, or `not_found`, including full `sort_name`, derived
+`artist_sort`, MBID, `musicbrainz_type`, source, and timestamp. Reruns skip all cached artists,
+even if a manual sort was later undone. Transient failures stop the batch,
+leave earlier transactions saved, and leave the failed artist retryable.
+To deliberately retry a completed lookup, remove that artist's cache row
+using a database tool; this does not clear any existing artist_sort value.
+
+Automatic matching requires an exact normalized name, score 100, no close or
+same-name competitors, an untruncated result set, and a supported type-based
+mapping. Scores are search relevance, not proof of identity. People use the surname portion of an unambiguous surname inversion, including
+multipart surnames. Groups retain the full unchanged sortable name, or the full
+portion before a moved article (for example, `Beatles, The` becomes `Beatles`).
+Unknown types, aliases, complex
+ensemble inversions, and other uncertain mappings remain for manual review.
+Discogs numeric suffixes are removed only for search; these artists always
+remain for review because the Discogs number cannot identify the MB entity.
+
+Apply mode atomically saves the cache and updates only blank `artist_sort`
+values. Conflicting existing manual values force review. Neither `new_shelf`
+nor `final_shelf` is written, and original artist names are preserved.
+Unresolved artists remain in the existing `/artist-sorter` UI. Batch changes
+are not added to the UI's manual undo history; retain a database backup.
+
+Resolver tests: `node --test test/resolve-artists.test.js`.
+
+Existing cache tables gain a nullable `musicbrainz_type` column on the next apply
+or server startup. Old cache rows remain unchanged and skipped; dry runs do not
+migrate the database.

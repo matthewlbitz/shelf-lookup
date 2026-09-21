@@ -94,8 +94,8 @@ function resolveAlbumTable() {
           ? "shelf_label"
           : null;
 
-    const newShelfColumn = columns.includes("new_shelf_label")
-      ? "new_shelf_label"
+    const newShelfColumn = columns.includes("new_shelf")
+      ? "new_shelf"
       : columns.includes("new_shelf_label")
         ? "new_shelf_label"
         : columns.includes("shelf")
@@ -131,6 +131,8 @@ const quotedBarcodeColumn = quoteIdentifier(schema.barcodeColumn);
 const quotedAssignedAtColumn = quoteIdentifier(schema.assignedAtColumn);
 const artistSortColumn = "artist_sort";
 const quotedArtistSortColumn = quoteIdentifier(artistSortColumn);
+const finalShelfColumn = "final_shelf";
+const quotedFinalShelfColumn = quoteIdentifier(finalShelfColumn);
 const quotedCurrentShelfColumn = schema.currentShelfColumn
   ? quoteIdentifier(schema.currentShelfColumn)
   : null;
@@ -156,6 +158,12 @@ if (!hasColumn(existingColumns, artistSortColumn)) {
   );
 }
 
+if (!hasColumn(existingColumns, finalShelfColumn)) {
+  db.exec(
+    `ALTER TABLE ${quotedTable} ADD COLUMN ${quotedFinalShelfColumn} TEXT`
+  );
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS assignment_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,6 +184,23 @@ db.exec(`
     undone_at TEXT
   )
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS artist_sort_cache (
+    artist TEXT PRIMARY KEY,
+    sort_name TEXT,
+    artist_sort TEXT,
+    musicbrainz_id TEXT,
+    musicbrainz_type TEXT,
+    source TEXT NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+if (!hasColumn(getTableColumns("artist_sort_cache"), "musicbrainz_type")) {
+  db.exec("ALTER TABLE artist_sort_cache ADD COLUMN musicbrainz_type TEXT");
+}
 
 db.exec(
   `
