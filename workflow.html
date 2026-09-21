@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Library stacks</title><link rel="stylesheet" href="workflow.css"></head>
+<body><main class="shell workflow-shell">
+<header class="topbar"><h1>Library stacks</h1><div class="topbar-actions"><button id="homeButton" class="secondary">All stacks</button><a href="index.html">Existing tools</a></div></header>
+<p class="hint">Prepare → Assign → Columns → Shelves. Scan once, keep each pile together.</p>
+<p id="status" class="status" role="status" aria-live="polite">Connecting to your library…</p>
+<button id="retry" class="secondary" hidden>Retry saving the last step</button>
+<section id="home" class="panel">
+<h2>Start a stack</h2><p class="hint">Choose where this physical pile is now. Each pile gets its own saved place in the workflow.</p>
+<div class="grid"><div class="field"><label for="stackName">Stack label</label><input id="stackName" placeholder="e.g. Blue cart · pile 1" maxlength="80"></div><div class="field"><label for="worker">Your name</label><input id="worker" placeholder="So others know who has this pile" maxlength="60"></div></div>
+<div class="field"><label for="entry">Where is this stack starting?</label><select id="entry"><option value="prepare">Needs KTRU labels</option><option value="assign">Needs assignment</option><option value="columns">Needs column sorting</option><option value="shelves">Needs shelf sorting</option></select></div>
+<div id="assignmentOptions" class="field"><label for="captureMode">Which kind of pile?</label><select id="captureMode"><option value="range">No UPC · labels in order</option><option value="upc">With UPC / EAN</option><option value="individual">No UPC · labels out of order</option></select></div>
+<button id="create">Start this stack</button>
+<hr><div class="topbar"><h2>Continue a stack</h2><button id="refresh" class="secondary">Refresh</button></div>
+<p class="hint">Use the label on the physical pile to choose its saved stack. Released piles can be picked up by a partner.</p>
+<div id="stackList"></div>
+<details><summary>Completed stacks</summary><div id="completedList"></div></details>
+</section>
+<section id="work" class="panel" hidden>
+<div class="topbar"><h2 id="stackHeading"></h2><button id="release" class="secondary">Save & leave for a partner</button></div>
+<p class="hint">When pausing, keep the remaining source stack and any confirmed or column piles separate, in order, with this stack’s label.</p>
+<p id="stage" class="steps"></p><p id="instruction"></p><div id="workBody"></div>
+</section>
+<details class="panel"><summary>Connection & existing work</summary><p class="hint">All saved stacks live on this computer’s server. You can stop and restart the server without losing saved progress. Other devices need a local connection to it; internet is only needed for fresh UPC/EAN matches. If the server disconnects, stop moving CDs and retry the unsaved step when it returns.</p><p class="hint">Existing queues and shared handoffs remain in <a href="index.html">Existing tools</a>. Finish those piles there. Start new piles here for saved progress through every step.</p></details>
+</main><script src="workflow.js"></script></body></html>
