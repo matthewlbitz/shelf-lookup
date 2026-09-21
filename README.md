@@ -184,7 +184,7 @@ After the stack is done, scan the first barcode of another stack to continue,
 or uncheck **Ordered searching** for stacks that need individual scans. Toggling
 clears pending scans but keeps completed assignments. **Undo Last** restores the
 undone barcode and remaining range in the active session. Reloading resets the
-mode. External barcode matching remains available when ordered searching is off.
+mode. External barcode matching can be used with or without ordered searching.
 
 Run checks with `node --test test/ordered-search.test.js`.
 
@@ -265,8 +265,13 @@ The same barcode can be scanned in a later stack or in **One album at a time** m
 
 ### Paired barcode scanning
 
-Turn on **Use external barcodes (KTRU → UPC/EAN per CD)**. This switches off
-first/last range inference and clears pending scans. In the first pass, scan each
+Turn on **Use external barcodes (UPC/EAN)**. With **Ordered searching** also on,
+scan the first and last KTRU labels, then scan only the UPC/EAN on each CD from
+top to bottom. Each scan pairs with the next label automatically. Both options
+can also be used separately, or left off. Select your options before scanning;
+enabling an option clears pending scans.
+
+With Ordered searching off, scan each
 CD’s KTRU barcode followed by that same CD’s UPC/EAN, then move to the next CD.
 Use **Skip barcode** for CDs without an external barcode. Focus switches automatically.
 

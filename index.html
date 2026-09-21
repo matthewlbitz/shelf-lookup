@@ -882,7 +882,7 @@
 
               <label class="inline-toggle" for="externalToggle">
                 <input id="externalToggle" type="checkbox" aria-controls="externalFields" />
-                <span>Use external barcodes (KTRU → UPC/EAN per CD)</span>
+                <span>Use external barcodes (UPC/EAN)</span>
               </label>
               <div id="externalFields" hidden>
                 <div class="field" id="externalScanField">
@@ -1748,8 +1748,11 @@
       document.getElementById("phaseStatus").textContent = state.phase === "verify"
         ? `Check the match for KTRU ${current}, then assign before moving to the next CD.`
         : current ? `Scan UPC/EAN for this same CD (KTRU ${current}), or Skip barcode.`
+        : state.ordered ? (state.barcodeQueue.length
+          ? "All UPC/EAN scans saved. Click Finish scanning, then confirm from the last CD scanned."
+          : "Scan the first and last KTRU labels, then scan UPC/EAN codes from top to bottom.")
         : "Scan the next CD’s KTRU barcode, then its UPC/EAN. When the stack is scanned, click Finish scanning.";
-      barcodeInput.disabled = state.busy || state.phase !== "manual" || (externalToggle.checked && !!pending);
+      barcodeInput.disabled = state.busy || state.phase !== "manual" || (externalToggle.checked && (!!pending || (state.ordered && state.barcodeQueue.length > 0)));
       const readyToScan = externalToggle.checked && state.phase === "manual" && !!pending;
       document.getElementById("finishScanning").disabled = state.busy || state.phase !== "manual" || !state.barcodeQueue.length || !!pending;
       externalInput.disabled = state.busy || !(external || readyToScan);
@@ -1854,7 +1857,9 @@
       } else if (ordered.stage === "last") {
         status.textContent = `First barcode: ${ordered.first}. Now scan the last barcode to generate the full queue.`;
       } else if (ordered.stage === "assign") {
-        status.textContent = `Assign barcode ${ordered.current}. Work from the first CD down the stack; no more scans needed.`;
+        status.textContent = externalToggle.checked && state.phase === "manual"
+          ? `Scan each CD’s UPC/EAN from top to bottom. Next KTRU label: ${state.barcodeQueue.find(code => !state.pairs[code]) || "all scanned"}. Use Skip barcode for a CD without UPC/EAN.`
+          : `Assign barcode ${ordered.current}. Work down the stack in confirmation order.`;
       } else {
         status.textContent = "Stack complete. Scan the first barcode of the next stack, or turn off Ordered searching.";
       }
@@ -1865,7 +1870,7 @@
       state.ordered = orderedToggle.checked ? { stage: "first" } : null;
       state.orderedUndo.clear(); state.barcodeQueue = [];
       state.suggestionKey = null; invalidateResults(); searchInput.value = ""; barcodeInput.value = "";
-      if (state.ordered) externalToggle.checked = false;
+      state.pairs = {}; externalInput.value = "";
       setAssignStatus(""); syncFlow(); barcodeInput.focus();
     });
     function showVerification() {
@@ -1894,8 +1899,8 @@
     }
     externalToggle.addEventListener("change", () => {
       if (externalToggle.checked) {
-        // Pair capture starts with a fresh CD, never an inferred or reversed batch.
-        state.ordered = null; orderedToggle.checked = false;
+        // Keep ordered capture enabled when combining both options.
+        if (state.ordered) state.ordered = { stage: "first" };
         state.orderedUndo.clear(); state.barcodeQueue = []; state.pairs = {};
         invalidateResults(); barcodeInput.value = ""; externalInput.value = "";
       }
@@ -1918,13 +1923,18 @@
         state.pairs[internal] = { albums: [], unavailable: true, error: error.message };
       } finally {
         externalInput.value = ""; state.busy = false;
-        syncFlow(); barcodeInput.focus();
+        syncFlow();
+        if (state.ordered && state.barcodeQueue.some(code => !state.pairs[code])) externalInput.focus();
+        else if (state.ordered) document.getElementById("finishScanning").focus();
+        else barcodeInput.focus();
       }
     }
     function finishScanning() {
       if (state.busy || !externalToggle.checked || state.phase !== "manual" || !state.barcodeQueue.length
           || state.barcodeQueue.some(code => !state.pairs[code])) return;
       state.barcodeQueue.reverse();
+      if (state.ordered) state.ordered = { stage: "assign", first: state.barcodeQueue[0],
+        last: state.barcodeQueue.at(-1), current: state.barcodeQueue[0] };
       state.phase = "verify";
       showVerification();
     }
@@ -1976,13 +1986,13 @@
           if (data.assigned) throw Error("Barcode already assigned.");
           if (state.ordered.stage === "first" || state.ordered.stage === "complete") {
             state.ordered = { stage: "last", first: barcode };
-            state.orderedUndo.clear();
+            state.orderedUndo.clear(); state.pairs = {};
             setAssignStatus("First barcode saved. Scan the last barcode.");
           } else {
             const queue = OrderedSearch.range(state.ordered.first, barcode);
             state.ordered = { stage: "assign", first: state.ordered.first, last: barcode, current: queue[0] };
             state.barcodeQueue = queue;
-            setAssignStatus(`Queued ${queue.length} barcodes. Start assigning the first CD in the stack.`);
+            setAssignStatus(`Queued ${queue.length} barcodes. ${externalToggle.checked ? "Scan UPC/EAN codes from top to bottom." : "Start assigning the first CD in the stack."}`);
           }
           barcodeInput.value = "";
           return;
@@ -2056,7 +2066,7 @@
       delete state.pairs[removed];
       if (state.ordered) {
         state.ordered = state.barcodeQueue.length
-          ? { ...state.ordered, current: state.barcodeQueue[0] }
+          ? { ...state.ordered, current: state.barcodeQueue[0], last: state.barcodeQueue.at(-1) }
           : { stage: "first" };
         // A changed queue starts a new undo context so removed codes stay removed.
         state.orderedUndo.clear();
@@ -2068,7 +2078,8 @@
       }
       syncFlow();
       setAssignStatus(`Removed barcode ${removed} from the queue.`);
-      if (state.barcodeQueue.length) searchInput.focus();
+      if (externalToggle.checked && state.barcodeQueue.some(code => !state.pairs[code])) externalInput.focus();
+      else if (state.barcodeQueue.length) searchInput.focus();
       else barcodeInput.focus();
     });
 
