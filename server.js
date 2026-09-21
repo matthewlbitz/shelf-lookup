@@ -246,14 +246,11 @@ const quotedNewShelfLabelColumn = hasColumn(existingColumns, "new_shelf_label")
   ? quoteIdentifier("new_shelf_label")
   : null;
 
-const lookupShelfSelect =
-  quotedNewShelfColumn && quotedNewShelfLabelColumn
-    ? `COALESCE(${quotedNewShelfColumn}, ${quotedNewShelfLabelColumn}) AS new_shelf`
-    : quotedNewShelfColumn
-      ? `${quotedNewShelfColumn} AS new_shelf`
-      : quotedNewShelfLabelColumn
-        ? `${quotedNewShelfLabelColumn} AS new_shelf`
-        : "NULL AS new_shelf";
+// Shelf allocations may live in either schema; blank legacy values need fallback too.
+const effectiveShelfExpr = quotedNewShelfColumn && quotedNewShelfLabelColumn
+  ? `COALESCE(NULLIF(TRIM(${quotedNewShelfColumn}), ''), ${quotedNewShelfLabelColumn})`
+  : quotedNewShelfColumn || quotedNewShelfLabelColumn;
+const lookupShelfSelect = `${effectiveShelfExpr || "NULL"} AS new_shelf`;
 
 const lookupByBarcodeStmt = db.prepare(
   `
@@ -567,11 +564,11 @@ const undoArtistSort = db.transaction(() => {
   return history;
 });
 
-const shelfGroupExpr = quotedNewShelfColumn
-  ? `NULLIF(RTRIM(TRIM(${quotedNewShelfColumn}), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'), '')`
+const shelfGroupExpr = effectiveShelfExpr
+  ? `NULLIF(RTRIM(TRIM(${effectiveShelfExpr}), 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'), '')`
   : null;
 
-const progressStmt = quotedNewShelfColumn
+const progressStmt = effectiveShelfExpr
   ? db.prepare(
       `
         SELECT
@@ -584,7 +581,7 @@ const progressStmt = quotedNewShelfColumn
             END
           ) AS assigned
         FROM ${quotedTable}
-        WHERE TRIM(COALESCE(${quotedNewShelfColumn}, '')) <> ''
+        WHERE TRIM(COALESCE(${effectiveShelfExpr}, '')) <> ''
           AND ${shelfGroupExpr} IS NOT NULL
         GROUP BY section
         ORDER BY CAST(section AS INTEGER), section
