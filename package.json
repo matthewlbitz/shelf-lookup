@@ -6,9 +6,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js && node --check resolve-artists.js && node --check artist-resolution.js",
+    "test": "node --test test/*.test.js",
+    "resolve:artists": "node resolve-artists.js",
+    "review:artists": "node resolve-artists.js --review"
   },
-  "keywords": ["ktru", "music-library", "catalog", "sqlite", "express"],
+  "keywords": [
+    "ktru",
+    "music-library",
+    "catalog",
+    "sqlite",
+    "express"
+  ],
   "author": "Matthew Bitz",
   "license": "ISC",
   "dependencies": {

@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const Database = require("better-sqlite3");
+const { fillLocal } = require("./artist-resolution");
 
 // Keep credentials server-side; existing environment variables take precedence.
 const fs = require("fs");
@@ -42,21 +43,6 @@ function hasColumn(columns, name) {
   return columns.some((column) => column.name === name);
 }
 
-function inferAutomaticArtistSort(artist) {
-  const normalizedArtist = String(artist || "").trim();
-
-  const leadingTheMatch = normalizedArtist.match(/^The\s+(\S+)$/);
-  if (leadingTheMatch) {
-    return leadingTheMatch[1];
-  }
-
-  const numberedArtistMatch = normalizedArtist.match(/^(\S+)\s+\(\d+\)$/);
-  if (numberedArtistMatch) {
-    return numberedArtistMatch[1];
-  }
-
-  return null;
-}
 
 function resolveAlbumTable() {
   const tables = getUserTables();
@@ -407,21 +393,6 @@ const saveArtistSortStmt = db.prepare(`
     WHERE ${quotedArtistColumn} = ?
 `);
 
-const blankArtistSortArtistsStmt = db.prepare(`
-    SELECT DISTINCT ${quotedArtistColumn} AS artist
-    FROM ${quotedTable}
-    WHERE (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
-      AND ${quotedArtistColumn} IS NOT NULL
-      AND TRIM(${quotedArtistColumn}) <> ''
-`);
-
-const saveAutomaticArtistSortStmt = db.prepare(`
-    UPDATE ${quotedTable}
-    SET ${quotedArtistSortColumn} = @artistSort
-    WHERE ${quotedArtistColumn} = @artist
-      AND (${quotedArtistSortColumn} IS NULL OR TRIM(${quotedArtistSortColumn}) = '')
-`);
-
 const artistSortHistoryInsertStmt = db.prepare(`
     INSERT INTO artist_sort_history (
         artist,
@@ -525,20 +496,7 @@ const saveArtistSort = db.transaction((artist, artistSort) => {
   return result.changes;
 });
 
-const applyAutomaticArtistSorts = db.transaction(() => {
-  let updated = 0;
-
-  for (const { artist } of blankArtistSortArtistsStmt.all()) {
-    const artistSort = inferAutomaticArtistSort(artist);
-    if (!artistSort) {
-      continue;
-    }
-
-    updated += saveAutomaticArtistSortStmt.run({ artist, artistSort }).changes;
-  }
-
-  return updated;
-});
+const applyAutomaticArtistSorts = () => fillLocal(db, schema.tableName);
 
 applyAutomaticArtistSorts();
 
@@ -683,6 +641,16 @@ app.get("/api/recent-artist-sorts", (req, res) => {
     : ARTIST_SORT_RECENT_LIMIT;
 
   return res.json(recentArtistSortHistoryStmt.all(limit));
+});
+
+// Optional review queue; fallback artists are already sortable and do not block work.
+app.get("/api/artist-sort-review", (req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  res.json({
+    total: db.prepare("SELECT COUNT(*) AS n FROM artist_sort_cache WHERE status <> 'matched'").get().n,
+    artists: db.prepare("SELECT * FROM artist_sort_cache WHERE status <> 'matched' ORDER BY artist LIMIT ? OFFSET ?").all(Math.floor(limit), Math.floor(offset)),
+  });
 });
 
 app.get("/api/artist-sort-progress", (_req, res) => {

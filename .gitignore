@@ -7,3 +7,5 @@ node_modules/
 masterAlbums.test.db
 masterAlbums-*.db
 __pycache__/
+
+*.resolver.lock
