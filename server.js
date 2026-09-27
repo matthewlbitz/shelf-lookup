@@ -634,6 +634,42 @@ app.post("/api/undo-artist-sort", (_req, res) => {
   });
 });
 
+app.get("/catchall-unassigned", (_req, res) => {
+  try {
+    const table = db.prepare(`
+      SELECT 1
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = 'catchall_items'
+    `).get();
+
+    if (!table) {
+      return res.json([]);
+    }
+
+    const items = db.prepare(`
+      SELECT
+        ci.id,
+        ci.barcode,
+        ci.position
+      FROM catchall_items ci
+      WHERE ci.stage = 'unassigned'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM rainbow_albums ra
+          WHERE TRIM(ra.barcode) = TRIM(ci.barcode)
+        )
+      ORDER BY ci.position DESC
+    `).all();
+
+    return res.json(items);
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
 app.get("/api/recent-artist-sorts", (req, res) => {
   const requestedLimit = Number(req.query.limit);
   const limit = Number.isInteger(requestedLimit)
