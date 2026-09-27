@@ -921,6 +921,10 @@
               <div id="assignStatus" class="status"></div>
               <div id="manualHint" class="hint">Flow: scan barcode, search, choose a result with arrow keys or click, then press Enter to assign.</div>
               <div class="field">
+                <button id="loadCatchallButton" class="secondary" type="button">
+                  Load Final-Sorter Unassigned
+                </button>
+
                 <label>Barcode Queue</label>
                 
                 <div class="assign-actions" style="margin-top:10px;">
@@ -2114,6 +2118,61 @@
         setMode("sort");
       }
     });
+
+    const loadCatchallButton =
+      document.getElementById("loadCatchallButton");
+
+    async function loadCatchallQueue() {
+      if (state.busy) return;
+
+      state.busy = true;
+      syncFlow();
+
+      try {
+        const data = await fetchJson("/api/catchall/unassigned");
+
+        state.barcodeQueue = Array.isArray(data.barcodes)
+          ? data.barcodes
+          : [];
+
+        invalidateResults();
+        searchInput.value = "";
+
+        renderBarcodeQueue();
+        updateSessionWidgets();
+        updateAssignButton();
+
+        if (state.barcodeQueue.length) {
+          setAssignStatus(
+            `Loaded ${state.barcodeQueue.length} CDs from Final Sorter.`,
+            "success"
+          );
+
+          searchInput.focus();
+        } else {
+          setAssignStatus(
+            "No Final Sorter CDs are waiting for assignment."
+          );
+        }
+      } catch (error) {
+        setAssignStatus(
+          error.message || "Could not load Final Sorter stack.",
+          "error"
+        );
+      } finally {
+        state.busy = false;
+        syncFlow();
+
+        if (state.barcodeQueue.length) {
+          searchInput.focus();
+        }
+      }
+    }
+
+    loadCatchallButton.addEventListener(
+      "click",
+      loadCatchallQueue
+    );
 
     renderResults();
     renderResults();
