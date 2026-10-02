@@ -9,7 +9,7 @@ const envPath = path.join(__dirname, ".env");
 if (fs.existsSync(envPath)) process.loadEnvFile(envPath);
 
 const PORT = Number(process.env.PORT) || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "masterAlbums.db");
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "..", "data", "masterAlbums.db");
 const SHELF_GROUP_MAX = 32;
 const HISTORY_LIMIT = 10;
 const ARTIST_SORT_RECENT_LIMIT = 15;
@@ -636,29 +636,19 @@ app.post("/api/undo-artist-sort", (_req, res) => {
 
 app.get("/api/catchall/unassigned", (_req, res) => {
   try {
-    const table = db.prepare(`
-      SELECT 1
-      FROM sqlite_master
-      WHERE type='table' AND name='catchall_items'
-    `).get();
-
-    if (!table) {
-      return res.json({ barcodes: [] });
-    }
-
     const rows = db.prepare(`
-      SELECT ci.barcode, ci.position
+      SELECT ci.id, ci.barcode, ci.position
       FROM catchall_items ci
       WHERE ci.stage='unassigned'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM rainbow_albums ra
-          WHERE TRIM(ra.barcode) = TRIM(ci.barcode)
-        )
+        AND ci.album_rowid IS NULL
       ORDER BY ci.position DESC
     `).all();
 
+    console.log("CATCHALL UNASSIGNED:", rows);
+
     res.json({
+      count: rows.length,
+      rows,
       barcodes: rows.map(row => String(row.barcode))
     });
   } catch (error) {
