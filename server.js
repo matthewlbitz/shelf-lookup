@@ -236,7 +236,8 @@ const quotedNewShelfLabelColumn = hasColumn(existingColumns, "new_shelf_label")
 const effectiveShelfExpr = quotedNewShelfColumn && quotedNewShelfLabelColumn
   ? `COALESCE(NULLIF(TRIM(${quotedNewShelfColumn}), ''), ${quotedNewShelfLabelColumn})`
   : quotedNewShelfColumn || quotedNewShelfLabelColumn;
-const lookupShelfSelect = `${effectiveShelfExpr || "NULL"} AS new_shelf`;
+// Sorting destinations come exclusively from final_shelf; keep the frontend API name.
+const lookupShelfSelect = `${quotedFinalShelfColumn} AS new_shelf`;
 
 const lookupByBarcodeStmt = db.prepare(
   `
